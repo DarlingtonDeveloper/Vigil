@@ -9,8 +9,8 @@ class TestSurrealClientInit:
         from app.db.client import SurrealClient
         c = SurrealClient()
         assert c._url == "ws://localhost:8000/rpc"
-        assert c._namespace == "portfoliograph"
-        assert c._database == "portfoliograph"
+        assert c._namespace == "faultline"
+        assert c._database == "faultline"
         assert c._username == "root"
         assert c._password == "root"
         assert c._conn is None
@@ -31,7 +31,7 @@ class TestSurrealClientConnect:
             mock_conn.signin.assert_awaited_once_with(
                 {"username": "root", "password": "root"}
             )
-            mock_conn.use.assert_awaited_once_with("portfoliograph", "portfoliograph")
+            mock_conn.use.assert_awaited_once_with("faultline", "faultline")
             assert fresh_db_client._conn is mock_conn
 
     async def test_disconnect(self, db_client, mock_conn):
