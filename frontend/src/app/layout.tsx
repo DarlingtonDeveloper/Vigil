@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "FaultLine",
-  description: "Agentic risk pricing engine for AI agent deployments",
+  title: "FaultLine — AI Agent Deployment Risk Pricing",
+  description:
+    "Price the legal and operational risk of deploying AI agents",
 };
 
 export default function RootLayout({
@@ -12,8 +13,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="en" className="dark">
+      <body className="antialiased">{children}</body>
     </html>
   );
 }

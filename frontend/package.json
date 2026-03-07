@@ -1,35 +1,39 @@
 {
-  "name": "faultline-frontend",
-  "version": "0.1.0",
+  "name": "frontend",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --port 3000",
     "build": "next build",
-    "start": "next start",
+    "start": "next start --port 3000",
+    "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
-    "next": "^15.1.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "ai": "^4.1.0",
-    "@ai-sdk/anthropic": "^1.1.0",
-    "react-force-graph-2d": "^1.25.0",
-    "recharts": "^2.15.0",
-    "zod": "^3.24.0"
+    "@ai-sdk/anthropic": "^3.0.58",
+    "@ai-sdk/react": "^3.0.118",
+    "@tailwindcss/postcss": "^4.2.1",
+    "@types/node": "^25.3.5",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "ai": "^6.0.116",
+    "autoprefixer": "^10.4.27",
+    "next": "^16.1.6",
+    "postcss": "^8.5.8",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-force-graph-2d": "^1.29.1",
+    "tailwindcss": "^4.2.1",
+    "typescript": "^5.9.3",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@types/react": "^19.0.0",
-    "typescript": "^5.7.0",
-    "tailwindcss": "^3.4.0",
-    "postcss": "^8.4.0",
-    "autoprefixer": "^10.4.0",
-    "vitest": "^3.0.0",
-    "@testing-library/react": "^16.1.0",
-    "@testing-library/jest-dom": "^6.6.0",
-    "@vitejs/plugin-react": "^4.3.0",
-    "jsdom": "^25.0.0"
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@vitejs/plugin-react": "^5.1.4",
+    "jsdom": "^28.1.0",
+    "vitest": "^4.0.18"
   }
 }
