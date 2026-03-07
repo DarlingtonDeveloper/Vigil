@@ -28,10 +28,10 @@ def get_opik_tracer(session_id: str = "", tags: list[str] | None = None) -> Opik
     Pass this as a callback when invoking the graph or individual chains.
     """
     return OpikTracer(
-        tags=tags or ["faultline"],
+        tags=tags or ["vigil"],
         metadata={
             "session_id": session_id,
-            "project": "faultline",
+            "project": "vigil",
         },
     )
 

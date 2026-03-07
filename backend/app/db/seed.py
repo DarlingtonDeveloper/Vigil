@@ -1,5 +1,5 @@
 """
-Seed the FaultLine knowledge graph with legal doctrine, regulatory frameworks,
+Seed the Vigil knowledge graph with legal doctrine, regulatory frameworks,
 risk factors, and mitigation patterns.
 
 This is the intellectual core of the product. The data here represents a

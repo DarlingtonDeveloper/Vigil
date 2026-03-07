@@ -18,7 +18,7 @@ vi.mock("ai", () => ({
 }));
 
 describe("Home page", () => {
-  it("renders FaultLine branding", () => {
+  it("renders Vigil branding", () => {
     render(<Home />);
     expect(screen.getByText("Fault")).toBeInTheDocument();
     expect(screen.getByText("Line")).toBeInTheDocument();

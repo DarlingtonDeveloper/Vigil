@@ -53,10 +53,10 @@ def get_langsmith_run_config(session_id: str, agent_name: str = "") -> dict:
         "metadata": {
             "session_id": session_id,
             "agent": agent_name,
-            "project": "faultline",
+            "project": "vigil",
         },
-        "tags": ["faultline", agent_name] if agent_name else ["faultline"],
-        "run_name": f"faultline-{agent_name or 'workflow'}-{session_id[:8]}",
+        "tags": ["vigil", agent_name] if agent_name else ["vigil"],
+        "run_name": f"vigil-{agent_name or 'workflow'}-{session_id[:8]}",
     }
 
 

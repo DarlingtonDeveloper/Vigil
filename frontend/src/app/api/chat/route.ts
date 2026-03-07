@@ -10,7 +10,7 @@ export async function POST(req: Request) {
 
   const result = streamText({
     model: anthropic("claude-sonnet-4-20250514"),
-    system: `You are FaultLine, an AI risk pricing engine for agentic AI deployments.
+    system: `You are Vigil, an AI risk pricing engine for agentic AI deployments.
 
 You help companies understand the legal and operational risk of deploying AI agents. When a user describes their agentic system, use the assessDeployment tool to run a full risk assessment.
 

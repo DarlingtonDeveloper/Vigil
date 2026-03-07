@@ -40,8 +40,8 @@ def test_backend_service(compose):
 def test_backend_env_vars(compose):
     env = compose["services"]["backend"]["environment"]
     env_dict = {e.split("=")[0]: e.split("=")[1] for e in env}
-    assert env_dict["SURREAL_NS"] == "faultline"
-    assert env_dict["SURREAL_DB"] == "faultline"
+    assert env_dict["SURREAL_NS"] == "vigil"
+    assert env_dict["SURREAL_DB"] == "vigil"
     assert "surrealdb:8000" in env_dict["SURREAL_URL"]
 
 

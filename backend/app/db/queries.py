@@ -1,4 +1,4 @@
-"""Named query functions for FaultLine operations."""
+"""Named query functions for Vigil operations."""
 from app.db.client import db
 
 

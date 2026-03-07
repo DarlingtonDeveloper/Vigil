@@ -104,7 +104,7 @@ vigil/
 │       │   ├── mitigation.py        # Stage 5 — control evaluation
 │       │   └── pricing.py           # Stage 6 — risk pricing
 │       ├── graph/
-│       │   ├── state.py             # FaultLineState TypedDict
+│       │   ├── state.py             # VigilState TypedDict
 │       │   └── workflow.py          # LangGraph StateGraph (6 nodes)
 │       ├── routes/
 │       │   ├── assess.py            # POST /api/assess
@@ -208,14 +208,14 @@ Create a `.env` file from `.env.example`. The following variables are used:
 | `SURREAL_URL` | No | `ws://localhost:8000/rpc` | SurrealDB WebSocket endpoint |
 | `SURREAL_USER` | No | `root` | SurrealDB username |
 | `SURREAL_PASS` | No | `root` | SurrealDB password |
-| `SURREAL_NS` | No | `faultline` | SurrealDB namespace |
-| `SURREAL_DB` | No | `faultline` | SurrealDB database |
+| `SURREAL_NS` | No | `vigil` | SurrealDB namespace |
+| `SURREAL_DB` | No | `vigil` | SurrealDB database |
 | `OPIK_API_KEY` | No | — | Comet Opik key (enables quality gates) |
 | `OPIK_WORKSPACE` | No | — | Opik workspace name |
-| `OPIK_PROJECT_NAME` | No | `faultline` | Opik project name |
+| `OPIK_PROJECT_NAME` | No | `vigil` | Opik project name |
 | `LANGCHAIN_TRACING_V2` | No | `true` | Enable LangSmith tracing |
 | `LANGCHAIN_API_KEY` | No | — | LangSmith API key |
-| `LANGCHAIN_PROJECT` | No | `faultline` | LangSmith project name |
+| `LANGCHAIN_PROJECT` | No | `vigil` | LangSmith project name |
 
 ### Frontend
 

@@ -41,7 +41,7 @@ def test_get_opik_tracer_default_tags():
         MockTracer.return_value = MagicMock()
         get_opik_tracer()
         call_kwargs = MockTracer.call_args[1]
-        assert call_kwargs["tags"] == ["faultline"]
+        assert call_kwargs["tags"] == ["vigil"]
 
 
 def test_get_opik_tracer_custom_tags():
@@ -58,7 +58,7 @@ def test_get_opik_tracer_metadata_includes_session():
         get_opik_tracer(session_id="abc-123")
         call_kwargs = MockTracer.call_args[1]
         assert call_kwargs["metadata"]["session_id"] == "abc-123"
-        assert call_kwargs["metadata"]["project"] == "faultline"
+        assert call_kwargs["metadata"]["project"] == "vigil"
 
 
 def test_track_graph_wraps_compiled_graph():

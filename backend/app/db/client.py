@@ -1,5 +1,5 @@
 """
-Async SurrealDB client for FaultLine.
+Async SurrealDB client for Vigil.
 
 Wraps the surrealdb Python SDK with connection management, schema execution,
 and domain-specific helpers for the knowledge graph.
@@ -66,7 +66,7 @@ class SurrealClient:
         """Delete a record by its full ID."""
         return await self._conn.delete(thing)
 
-    # ---- FaultLine-specific helpers ----
+    # ---- Vigil-specific helpers ----
 
     async def get_applicable_doctrines(self, jurisdictions: list[str], domains: list[str]) -> list:
         """Get legal doctrines relevant to given jurisdictions and domains."""

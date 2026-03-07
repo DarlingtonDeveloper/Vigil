@@ -8,8 +8,8 @@ class Settings(BaseSettings):
     surreal_url: str = "ws://localhost:8000/rpc"
     surreal_user: str = "root"
     surreal_pass: str = "root"
-    surreal_ns: str = "faultline"
-    surreal_db: str = "faultline"
+    surreal_ns: str = "vigil"
+    surreal_db: str = "vigil"
 
     # Anthropic
     anthropic_api_key: str = ""
@@ -17,12 +17,12 @@ class Settings(BaseSettings):
     # Opik
     opik_api_key: str = ""
     opik_workspace: str = ""
-    opik_project_name: str = "faultline"
+    opik_project_name: str = "vigil"
 
     # LangSmith
     langchain_tracing_v2: bool = True
     langchain_api_key: str = ""
-    langchain_project: str = "faultline"
+    langchain_project: str = "vigil"
 
     # Rate limiting
     rate_limit_requests_per_hour: int = 20

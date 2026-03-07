@@ -5,10 +5,10 @@ import Home from "@/app/page";
 describe("Home page", () => {
   afterEach(cleanup);
 
-  it("renders the FaultLine heading", () => {
+  it("renders the Vigil heading", () => {
     render(<Home />);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "FaultLine"
+      "Vigil"
     );
   });
 

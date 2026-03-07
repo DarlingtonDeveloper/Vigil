@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="FaultLine",
+    title="Vigil",
     description="Agentic risk pricing engine for AI agent deployments",
     version="0.1.0",
     lifespan=lifespan,

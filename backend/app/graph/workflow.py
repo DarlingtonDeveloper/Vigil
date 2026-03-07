@@ -3,7 +3,7 @@ import uuid
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
-from app.graph.state import FaultLineState
+from app.graph.state import VigilState
 from app.agents.intake import run_intake
 from app.agents.legal import run_legal_analysis
 from app.agents.technical import run_technical_analysis
@@ -17,7 +17,7 @@ from app.tracing.langsmith_setup import get_langsmith_run_config
 from app.tracing.cost_tracker import track_llm_cost
 
 
-async def intake_node(state: FaultLineState) -> dict:
+async def intake_node(state: VigilState) -> dict:
     """Parse deployment description into structured profile."""
     sid = state["session_id"]
     await log_audit(sid, "intake", "start")
@@ -58,7 +58,7 @@ async def intake_node(state: FaultLineState) -> dict:
     return {"deployment_profile": profile_dict, "current_step": "intake_complete"}
 
 
-async def fetch_knowledge_node(state: FaultLineState) -> dict:
+async def fetch_knowledge_node(state: VigilState) -> dict:
     """Fetch relevant knowledge graph data from SurrealDB for the agents."""
     sid = state["session_id"]
     await log_audit(sid, "knowledge_fetch", "start")
@@ -99,7 +99,7 @@ async def fetch_knowledge_node(state: FaultLineState) -> dict:
     }
 
 
-async def legal_node(state: FaultLineState) -> dict:
+async def legal_node(state: VigilState) -> dict:
     sid = state["session_id"]
     await log_audit(sid, "legal", "start")
 
@@ -121,7 +121,7 @@ async def legal_node(state: FaultLineState) -> dict:
             "current_step": "legal_complete"}
 
 
-async def technical_node(state: FaultLineState) -> dict:
+async def technical_node(state: VigilState) -> dict:
     sid = state["session_id"]
     await log_audit(sid, "technical", "start")
 
@@ -141,7 +141,7 @@ async def technical_node(state: FaultLineState) -> dict:
             "current_step": "technical_complete"}
 
 
-async def mitigation_node(state: FaultLineState) -> dict:
+async def mitigation_node(state: VigilState) -> dict:
     sid = state["session_id"]
     await log_audit(sid, "mitigation", "start")
 
@@ -155,7 +155,7 @@ async def mitigation_node(state: FaultLineState) -> dict:
     return {"mitigation_analysis": analysis.model_dump(), "current_step": "mitigation_complete"}
 
 
-async def pricing_node(state: FaultLineState) -> dict:
+async def pricing_node(state: VigilState) -> dict:
     sid = state["session_id"]
     await log_audit(sid, "pricing", "start")
 
@@ -237,7 +237,7 @@ async def pricing_node(state: FaultLineState) -> dict:
 
 
 def build_workflow():
-    workflow = StateGraph(FaultLineState)
+    workflow = StateGraph(VigilState)
 
     workflow.add_node("intake", intake_node)
     workflow.add_node("fetch_knowledge", fetch_knowledge_node)
@@ -270,7 +270,7 @@ async def run_assessment(description: str, jurisdictions: list[str], sector: str
             status = 'running', created_at = time::now(), updated_at = time::now()
     """, {"sid": session_id, "uid": user_id, "desc": description})
 
-    initial_state: FaultLineState = {
+    initial_state: VigilState = {
         "session_id": session_id, "user_id": user_id,
         "description": description, "jurisdictions": jurisdictions, "sector": sector,
         "deployment_profile": None, "applicable_doctrines": [], "applicable_regulations": [],

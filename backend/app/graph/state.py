@@ -1,7 +1,7 @@
 from typing import TypedDict
 
 
-class FaultLineState(TypedDict):
+class VigilState(TypedDict):
     # Input
     session_id: str
     user_id: str

@@ -57,7 +57,7 @@ describe("POST /api/chat", () => {
 
     expect(streamText).toHaveBeenCalledOnce();
     const call = (streamText as any).mock.calls[0][0];
-    expect(call.system).toContain("FaultLine");
+    expect(call.system).toContain("Vigil");
     expect(call.system).toContain("risk pricing engine");
   });
 

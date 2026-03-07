@@ -2,7 +2,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 
-from app.graph.state import FaultLineState
+from app.graph.state import VigilState
 from app.graph.workflow import (
     build_workflow,
     intake_node,
@@ -109,8 +109,8 @@ SAMPLE_PRICING = RiskPrice(
 )
 
 
-def _base_state(**overrides) -> FaultLineState:
-    state: FaultLineState = {
+def _base_state(**overrides) -> VigilState:
+    state: VigilState = {
         "session_id": "test-session-001",
         "user_id": "demo-user",
         "description": "A customer support chatbot that sends emails",
@@ -138,9 +138,9 @@ def _base_state(**overrides) -> FaultLineState:
 
 # -- State tests -------------------------------------------------------------
 
-def test_faultline_state_has_all_required_keys():
-    """FaultLineState TypedDict declares all expected keys."""
-    annotations = FaultLineState.__annotations__
+def test_vigil_state_has_all_required_keys():
+    """VigilState TypedDict declares all expected keys."""
+    annotations = VigilState.__annotations__
     expected = [
         "session_id", "user_id", "description", "jurisdictions", "sector",
         "deployment_profile",
@@ -151,7 +151,7 @@ def test_faultline_state_has_all_required_keys():
         "current_step", "error",
     ]
     for key in expected:
-        assert key in annotations, f"Missing key {key} in FaultLineState"
+        assert key in annotations, f"Missing key {key} in VigilState"
 
 
 # -- Build workflow tests ----------------------------------------------------

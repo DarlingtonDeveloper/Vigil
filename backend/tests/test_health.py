@@ -34,5 +34,5 @@ def test_openapi_metadata(client):
     response = client.get("/openapi.json")
     assert response.status_code == 200
     data = response.json()
-    assert data["info"]["title"] == "FaultLine"
+    assert data["info"]["title"] == "Vigil"
     assert data["info"]["version"] == "0.1.0"

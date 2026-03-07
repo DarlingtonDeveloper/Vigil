@@ -9,12 +9,12 @@ class TestVerifyLangsmithConfig:
     def test_ready_when_configured(self, monkeypatch):
         monkeypatch.setenv("LANGCHAIN_TRACING_V2", "true")
         monkeypatch.setenv("LANGCHAIN_API_KEY", "ls-test-key")
-        monkeypatch.setenv("LANGCHAIN_PROJECT", "faultline")
+        monkeypatch.setenv("LANGCHAIN_PROJECT", "vigil")
         status = verify_langsmith_config()
         assert status["ready"] is True
         assert status["tracing_enabled"] is True
         assert status["api_key_set"] is True
-        assert status["project"] == "faultline"
+        assert status["project"] == "vigil"
 
     def test_not_ready_without_api_key(self, monkeypatch):
         monkeypatch.setenv("LANGCHAIN_TRACING_V2", "true")
@@ -56,31 +56,31 @@ class TestGetLangsmithRunConfig:
     def test_metadata_contains_session_id(self):
         config = get_langsmith_run_config("sess-1234-abcd")
         assert config["metadata"]["session_id"] == "sess-1234-abcd"
-        assert config["metadata"]["project"] == "faultline"
+        assert config["metadata"]["project"] == "vigil"
 
     def test_agent_name_in_config(self):
         config = get_langsmith_run_config("sess-1234", agent_name="enricher")
         assert config["metadata"]["agent"] == "enricher"
         assert "enricher" in config["tags"]
-        assert "faultline" in config["tags"]
+        assert "vigil" in config["tags"]
         assert "enricher" in config["run_name"]
 
     def test_default_agent_name_empty(self):
         config = get_langsmith_run_config("sess-1234")
         assert config["metadata"]["agent"] == ""
-        assert config["tags"] == ["faultline"]
+        assert config["tags"] == ["vigil"]
         assert "workflow" in config["run_name"]
 
     def test_run_name_uses_session_prefix(self):
         config = get_langsmith_run_config("abcdefgh-1234-5678", agent_name="legal")
-        assert config["run_name"] == "faultline-legal-abcdefgh"
+        assert config["run_name"] == "vigil-legal-abcdefgh"
 
 
 class TestGetTraceUrl:
     def test_generates_url(self, monkeypatch):
-        monkeypatch.setenv("LANGCHAIN_PROJECT", "faultline")
+        monkeypatch.setenv("LANGCHAIN_PROJECT", "vigil")
         url = get_trace_url("run-123")
-        assert url == "https://smith.langchain.com/o/default/projects/p/faultline/r/run-123"
+        assert url == "https://smith.langchain.com/o/default/projects/p/vigil/r/run-123"
 
     def test_uses_default_project(self, monkeypatch):
         monkeypatch.delenv("LANGCHAIN_PROJECT", raising=False)

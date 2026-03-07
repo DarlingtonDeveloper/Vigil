@@ -9,8 +9,8 @@ class TestSurrealClientInit:
         from app.db.client import SurrealClient
         c = SurrealClient()
         assert c._url == "ws://localhost:8000/rpc"
-        assert c._namespace == "faultline"
-        assert c._database == "faultline"
+        assert c._namespace == "vigil"
+        assert c._database == "vigil"
         assert c._username == "root"
         assert c._password == "root"
         assert c._conn is None
@@ -31,7 +31,7 @@ class TestSurrealClientConnect:
             mock_conn.signin.assert_awaited_once_with(
                 {"username": "root", "password": "root"}
             )
-            mock_conn.use.assert_awaited_once_with("faultline", "faultline")
+            mock_conn.use.assert_awaited_once_with("vigil", "vigil")
             assert fresh_db_client._conn is mock_conn
 
     async def test_disconnect(self, db_client, mock_conn):
@@ -100,7 +100,7 @@ class TestSurrealClientSchema:
 
 
 class TestSurrealClientHelpers:
-    """Test FaultLine-specific helper methods."""
+    """Test Vigil-specific helper methods."""
 
     async def test_get_applicable_doctrines(self, db_client, mock_conn):
         mock_conn.query.return_value = [{"result": [{"name": "apparent_authority"}]}]

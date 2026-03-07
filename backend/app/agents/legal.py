@@ -49,11 +49,11 @@ class LegalAnalysis(BaseModel):
     confidence: float
 
 
-LEGAL_SYSTEM_PROMPT = """You are the Legal Analyst Agent for FaultLine, an AI risk pricing engine.
+LEGAL_SYSTEM_PROMPT = """You are the Legal Analyst Agent for Vigil, an AI risk pricing engine.
 
 You assess the legal exposure of an agentic AI deployment. You have access to:
 1. A structured deployment profile (what the agent does, its tools, data access, oversight)
-2. Relevant legal doctrines from FaultLine's knowledge graph
+2. Relevant legal doctrines from Vigil's knowledge graph
 3. Applicable regulations
 
 For each legal doctrine provided, assess:

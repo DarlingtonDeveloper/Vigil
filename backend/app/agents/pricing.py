@@ -39,7 +39,7 @@ class RiskPrice(BaseModel):
     data_gaps: list[str]
 
 
-PRICING_SYSTEM_PROMPT = """You are the Pricing Agent for FaultLine, an AI risk pricing engine.
+PRICING_SYSTEM_PROMPT = """You are the Pricing Agent for Vigil, an AI risk pricing engine.
 
 You synthesize all analyses into a final risk assessment and price.
 

@@ -29,7 +29,7 @@ class TechnicalAnalysis(BaseModel):
     confidence: float
 
 
-TECHNICAL_SYSTEM_PROMPT = """You are the Technical Risk Agent for FaultLine, an AI risk pricing engine.
+TECHNICAL_SYSTEM_PROMPT = """You are the Technical Risk Agent for Vigil, an AI risk pricing engine.
 
 You assess the technical risk of an agentic AI deployment by scoring it against a taxonomy of risk factors. Each factor has defined levels with criteria and scores.
 

@@ -51,7 +51,7 @@ class DeploymentProfile(BaseModel):
     key_risks_identified: list[str]         # agent's initial observations
 
 
-INTAKE_SYSTEM_PROMPT = """You are the Intake Agent for FaultLine, an AI risk pricing engine.
+INTAKE_SYSTEM_PROMPT = """You are the Intake Agent for Vigil, an AI risk pricing engine.
 
 A company is describing an agentic AI system they want to deploy (or have deployed). Your job is to extract structured data about the deployment that will feed into legal and technical risk assessment.
 

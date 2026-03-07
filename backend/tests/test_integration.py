@@ -18,12 +18,12 @@ async def live_client():
     """Connect to a real SurrealDB, use an isolated test namespace/db, and clean up."""
     from app.db.client import SurrealClient
     c = SurrealClient()
-    c._namespace = "test_faultline"
-    c._database = "test_faultline"
+    c._namespace = "test_vigil"
+    c._database = "test_vigil"
     await c.connect()
     await c.execute_schema()
     yield c
-    await c.query("REMOVE DATABASE test_faultline")
+    await c.query("REMOVE DATABASE test_vigil")
     await c.disconnect()
 
 

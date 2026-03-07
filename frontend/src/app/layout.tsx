@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "FaultLine — AI Agent Deployment Risk Pricing",
+  title: "Vigil — AI Agent Deployment Risk Pricing",
   description:
     "Price the legal and operational risk of deploying AI agents",
 };
