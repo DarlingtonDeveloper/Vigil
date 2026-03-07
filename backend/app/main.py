@@ -14,8 +14,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="PortfolioGraph",
-    description="Agentic portfolio contagion analyzer",
+    title="FaultLine",
+    description="Agentic risk pricing engine for AI agent deployments",
     version="0.1.0",
     lifespan=lifespan,
 )
