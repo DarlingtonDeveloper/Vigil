@@ -187,6 +187,7 @@ def _mock_llm_response(data: dict, code_fenced: bool = False) -> MagicMock:
         raw = f"```json\n{raw}\n```"
     resp = MagicMock()
     resp.content = raw
+    resp.usage_metadata = None
     return resp
 
 
@@ -328,6 +329,7 @@ class TestRunIntake:
     async def test_raises_on_invalid_json(self):
         mock_resp = MagicMock()
         mock_resp.content = "not json at all"
+        mock_resp.usage_metadata = None
         with patch("app.agents.intake.ChatAnthropic") as MockLLM:
             MockLLM.return_value.ainvoke = AsyncMock(return_value=mock_resp)
             with pytest.raises(ValueError, match="invalid JSON"):
@@ -373,6 +375,7 @@ class TestRunLegalAnalysis:
     async def test_raises_on_invalid_json(self):
         mock_resp = MagicMock()
         mock_resp.content = "broken {json"
+        mock_resp.usage_metadata = None
         with patch("app.agents.legal.ChatAnthropic") as MockLLM:
             MockLLM.return_value.ainvoke = AsyncMock(return_value=mock_resp)
             with pytest.raises(ValueError, match="invalid JSON"):
@@ -417,6 +420,7 @@ class TestRunTechnicalAnalysis:
     async def test_raises_on_invalid_json(self):
         mock_resp = MagicMock()
         mock_resp.content = ""
+        mock_resp.usage_metadata = None
         with patch("app.agents.technical.ChatAnthropic") as MockLLM:
             MockLLM.return_value.ainvoke = AsyncMock(return_value=mock_resp)
             with pytest.raises(ValueError, match="invalid JSON"):
@@ -459,6 +463,7 @@ class TestRunMitigationAnalysis:
     async def test_raises_on_invalid_json(self):
         mock_resp = MagicMock()
         mock_resp.content = "```json\n{invalid}\n```"
+        mock_resp.usage_metadata = None
         with patch("app.agents.mitigation.ChatAnthropic") as MockLLM:
             MockLLM.return_value.ainvoke = AsyncMock(return_value=mock_resp)
             with pytest.raises(ValueError, match="invalid JSON"):
@@ -506,6 +511,7 @@ class TestRunPricing:
     async def test_raises_on_invalid_json(self):
         mock_resp = MagicMock()
         mock_resp.content = "I cannot produce JSON"
+        mock_resp.usage_metadata = None
         with patch("app.agents.pricing.ChatAnthropic") as MockLLM:
             MockLLM.return_value.ainvoke = AsyncMock(return_value=mock_resp)
             with pytest.raises(ValueError, match="invalid JSON"):

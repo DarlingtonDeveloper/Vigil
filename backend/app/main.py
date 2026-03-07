@@ -1,16 +1,42 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.db.client import db
+from app.db.seed import seed_knowledge_graph
+from app.prompts.manager import seed_default_prompts
 from app.tracing.langsmith_setup import verify_langsmith_config
+from app.tracing.opik_setup import init_opik
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Startup
+    try:
+        await db.connect()
+        schema_path = Path(__file__).parent / "db" / "schema.surql"
+        await db.execute_schema(str(schema_path))
+        await seed_knowledge_graph()
+        await seed_default_prompts()
+        print("SurrealDB: CONNECTED and seeded")
+    except Exception as e:
+        print(f"SurrealDB: STARTUP ERROR — {e}")
+
     langsmith_status = verify_langsmith_config()
     print(f"LangSmith: {'READY' if langsmith_status['ready'] else 'NOT CONFIGURED'}")
+
+    try:
+        init_opik()
+        print("Opik: INITIALIZED")
+    except Exception as e:
+        print(f"Opik: INIT ERROR — {e}")
+
     yield
+
+    # Shutdown
+    await db.disconnect()
 
 
 app = FastAPI(

@@ -18,6 +18,9 @@ from app.agents.legal import LegalAnalysis, DoctrineAssessment, RegulatoryGap
 from app.agents.technical import TechnicalAnalysis, FactorScore
 from app.agents.mitigation import MitigationAnalysis, MitigationAxisScore
 from app.agents.pricing import RiskPrice, RiskScenario
+from app.tracing.opik_evaluator import EvalResult
+
+MOCK_EVAL_RESULT = EvalResult(stage="test", passed=True, score=0.9, reasons=["Passed all checks"])
 
 
 # -- Fixtures ----------------------------------------------------------------
@@ -253,11 +256,13 @@ async def test_legal_node():
     )
 
     with patch("app.graph.workflow.run_legal_analysis", new_callable=AsyncMock, return_value=SAMPLE_LEGAL) as mock_legal, \
-         patch("app.graph.workflow.log_audit", new_callable=AsyncMock):
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock), \
+         patch("app.graph.workflow.validate_legal_analysis", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT):
         result = await legal_node(state)
 
     assert result["current_step"] == "legal_complete"
     assert result["legal_analysis"]["legal_exposure_score"] == 0.65
+    assert result["legal_quality_score"] == 0.9
     # Verify agent received real knowledge graph data
     mock_legal.assert_awaited_once_with(
         state["deployment_profile"],
@@ -276,11 +281,13 @@ async def test_technical_node():
     )
 
     with patch("app.graph.workflow.run_technical_analysis", new_callable=AsyncMock, return_value=SAMPLE_TECHNICAL), \
-         patch("app.graph.workflow.log_audit", new_callable=AsyncMock):
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock), \
+         patch("app.graph.workflow.validate_technical_analysis", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT):
         result = await technical_node(state)
 
     assert result["current_step"] == "technical_complete"
     assert result["technical_analysis"]["technical_risk_score"] == 0.55
+    assert result["technical_quality_score"] == 0.9
 
 
 @pytest.mark.asyncio
@@ -312,6 +319,7 @@ async def test_pricing_node():
 
     with patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=SAMPLE_PRICING), \
          patch("app.graph.workflow.log_audit", new_callable=AsyncMock) as mock_audit, \
+         patch("app.graph.workflow.validate_pricing", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
          patch("app.graph.workflow.db") as mock_db:
         mock_db.query = AsyncMock(return_value=[])
 
@@ -320,6 +328,7 @@ async def test_pricing_node():
     assert result["current_step"] == "complete"
     assert "Medium" in result["risk_price"]["premium_band"]
     assert result["risk_price"]["overall_risk_score"] == 0.6
+    assert result["pricing_quality_score"] == 0.9
     # DB calls: risk_score CREATE + 1 scenario CREATE + UPDATE assessment
     assert mock_db.query.await_count == 3
     assert mock_audit.await_count == 2  # start + complete
@@ -348,6 +357,7 @@ async def test_pricing_node_persists_scenarios():
 
     with patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=pricing_with_two), \
          patch("app.graph.workflow.log_audit", new_callable=AsyncMock), \
+         patch("app.graph.workflow.validate_pricing", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
          patch("app.graph.workflow.db") as mock_db:
         mock_db.query = AsyncMock(return_value=[])
         await pricing_node(state)
@@ -386,6 +396,9 @@ async def test_run_assessment_full_pipeline():
          patch("app.graph.workflow.run_technical_analysis", new_callable=AsyncMock, return_value=SAMPLE_TECHNICAL), \
          patch("app.graph.workflow.run_mitigation_analysis", new_callable=AsyncMock, return_value=SAMPLE_MITIGATION), \
          patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=SAMPLE_PRICING), \
+         patch("app.graph.workflow.validate_legal_analysis", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
+         patch("app.graph.workflow.validate_technical_analysis", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
+         patch("app.graph.workflow.validate_pricing", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
          patch("app.graph.workflow.log_audit", new_callable=AsyncMock), \
          patch("app.graph.workflow.db") as mock_db, \
          patch("app.graph.workflow.get_opik_tracer") as mock_opik, \
@@ -932,6 +945,9 @@ async def test_full_state_progression_current_step():
          patch("app.graph.workflow.run_technical_analysis", new_callable=AsyncMock, return_value=SAMPLE_TECHNICAL), \
          patch("app.graph.workflow.run_mitigation_analysis", new_callable=AsyncMock, return_value=SAMPLE_MITIGATION), \
          patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=SAMPLE_PRICING), \
+         patch("app.graph.workflow.validate_legal_analysis", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
+         patch("app.graph.workflow.validate_technical_analysis", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
+         patch("app.graph.workflow.validate_pricing", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
          patch("app.graph.workflow.log_audit", new_callable=AsyncMock), \
          patch("app.graph.workflow.db") as mock_db, \
          patch("app.graph.workflow.get_opik_tracer") as mock_opik, \
@@ -975,6 +991,9 @@ async def test_run_assessment_connects_when_disconnected():
          patch("app.graph.workflow.run_technical_analysis", new_callable=AsyncMock, return_value=SAMPLE_TECHNICAL), \
          patch("app.graph.workflow.run_mitigation_analysis", new_callable=AsyncMock, return_value=SAMPLE_MITIGATION), \
          patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=SAMPLE_PRICING), \
+         patch("app.graph.workflow.validate_legal_analysis", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
+         patch("app.graph.workflow.validate_technical_analysis", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
+         patch("app.graph.workflow.validate_pricing", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
          patch("app.graph.workflow.log_audit", new_callable=AsyncMock), \
          patch("app.graph.workflow.db") as mock_db, \
          patch("app.graph.workflow.get_opik_tracer") as mock_opik, \
@@ -1000,6 +1019,9 @@ async def test_run_assessment_skips_connect_when_connected():
          patch("app.graph.workflow.run_technical_analysis", new_callable=AsyncMock, return_value=SAMPLE_TECHNICAL), \
          patch("app.graph.workflow.run_mitigation_analysis", new_callable=AsyncMock, return_value=SAMPLE_MITIGATION), \
          patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=SAMPLE_PRICING), \
+         patch("app.graph.workflow.validate_legal_analysis", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
+         patch("app.graph.workflow.validate_technical_analysis", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
+         patch("app.graph.workflow.validate_pricing", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
          patch("app.graph.workflow.log_audit", new_callable=AsyncMock), \
          patch("app.graph.workflow.db") as mock_db, \
          patch("app.graph.workflow.get_opik_tracer") as mock_opik, \
@@ -1018,13 +1040,16 @@ async def test_run_assessment_skips_connect_when_connected():
 
 
 @pytest.mark.asyncio
-async def test_quality_scores_remain_zero():
-    """Quality score fields should remain at 0.0 through the full pipeline (not yet implemented)."""
+async def test_quality_scores_populated_by_evaluators():
+    """Quality score fields should be populated by Opik evaluators in the pipeline."""
     with patch("app.graph.workflow.run_intake", new_callable=AsyncMock, return_value=SAMPLE_PROFILE), \
          patch("app.graph.workflow.run_legal_analysis", new_callable=AsyncMock, return_value=SAMPLE_LEGAL), \
          patch("app.graph.workflow.run_technical_analysis", new_callable=AsyncMock, return_value=SAMPLE_TECHNICAL), \
          patch("app.graph.workflow.run_mitigation_analysis", new_callable=AsyncMock, return_value=SAMPLE_MITIGATION), \
          patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=SAMPLE_PRICING), \
+         patch("app.graph.workflow.validate_legal_analysis", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
+         patch("app.graph.workflow.validate_technical_analysis", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
+         patch("app.graph.workflow.validate_pricing", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
          patch("app.graph.workflow.log_audit", new_callable=AsyncMock), \
          patch("app.graph.workflow.db") as mock_db, \
          patch("app.graph.workflow.get_opik_tracer") as mock_opik, \
@@ -1039,9 +1064,9 @@ async def test_quality_scores_remain_zero():
 
         result = await run_assessment("chatbot", ["UK"], "financial", "demo-user")
 
-    assert result["legal_quality_score"] == 0.0
-    assert result["technical_quality_score"] == 0.0
-    assert result["pricing_quality_score"] == 0.0
+    assert result["legal_quality_score"] == 0.9
+    assert result["technical_quality_score"] == 0.9
+    assert result["pricing_quality_score"] == 0.9
 
 
 # ============================================================================
@@ -1062,6 +1087,9 @@ async def test_full_pipeline_audit_trail_completeness():
          patch("app.graph.workflow.run_technical_analysis", new_callable=AsyncMock, return_value=SAMPLE_TECHNICAL), \
          patch("app.graph.workflow.run_mitigation_analysis", new_callable=AsyncMock, return_value=SAMPLE_MITIGATION), \
          patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=SAMPLE_PRICING), \
+         patch("app.graph.workflow.validate_legal_analysis", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
+         patch("app.graph.workflow.validate_technical_analysis", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
+         patch("app.graph.workflow.validate_pricing", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
          patch("app.graph.workflow.db") as mock_db, \
          patch("app.graph.workflow.get_opik_tracer") as mock_opik, \
          patch("app.graph.workflow.get_langsmith_run_config", return_value={"run_name": "test"}):
@@ -1099,6 +1127,9 @@ async def test_full_pipeline_audit_ordering():
          patch("app.graph.workflow.run_technical_analysis", new_callable=AsyncMock, return_value=SAMPLE_TECHNICAL), \
          patch("app.graph.workflow.run_mitigation_analysis", new_callable=AsyncMock, return_value=SAMPLE_MITIGATION), \
          patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=SAMPLE_PRICING), \
+         patch("app.graph.workflow.validate_legal_analysis", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
+         patch("app.graph.workflow.validate_technical_analysis", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
+         patch("app.graph.workflow.validate_pricing", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
          patch("app.graph.workflow.db") as mock_db, \
          patch("app.graph.workflow.get_opik_tracer") as mock_opik, \
          patch("app.graph.workflow.get_langsmith_run_config", return_value={"run_name": "test"}):
@@ -1140,6 +1171,7 @@ async def test_pricing_node_zero_scenarios():
 
     with patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=pricing_no_scenarios), \
          patch("app.graph.workflow.log_audit", new_callable=AsyncMock), \
+         patch("app.graph.workflow.validate_pricing", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
          patch("app.graph.workflow.db") as mock_db:
         mock_db.query = AsyncMock(return_value=[])
         result = await pricing_node(state)
@@ -1167,6 +1199,7 @@ async def test_pricing_node_audit_includes_output_data():
 
     with patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=SAMPLE_PRICING), \
          patch("app.graph.workflow.log_audit", side_effect=capture_audit), \
+         patch("app.graph.workflow.validate_pricing", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
          patch("app.graph.workflow.db") as mock_db:
         mock_db.query = AsyncMock(return_value=[])
         await pricing_node(state)
@@ -1195,6 +1228,9 @@ async def test_run_assessment_creates_session_before_graph():
          patch("app.graph.workflow.run_technical_analysis", new_callable=AsyncMock, return_value=SAMPLE_TECHNICAL), \
          patch("app.graph.workflow.run_mitigation_analysis", new_callable=AsyncMock, return_value=SAMPLE_MITIGATION), \
          patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=SAMPLE_PRICING), \
+         patch("app.graph.workflow.validate_legal_analysis", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
+         patch("app.graph.workflow.validate_technical_analysis", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
+         patch("app.graph.workflow.validate_pricing", new_callable=AsyncMock, return_value=MOCK_EVAL_RESULT), \
          patch("app.graph.workflow.log_audit", new_callable=AsyncMock), \
          patch("app.graph.workflow.db") as mock_db, \
          patch("app.graph.workflow.get_opik_tracer") as mock_opik, \
