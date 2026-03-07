@@ -6,8 +6,8 @@ def test_default_surreal_settings():
     assert s.surreal_url == "ws://localhost:8000/rpc"
     assert s.surreal_user == "root"
     assert s.surreal_pass == "root"
-    assert s.surreal_ns == "portfoliograph"
-    assert s.surreal_db == "portfoliograph"
+    assert s.surreal_ns == "faultline"
+    assert s.surreal_db == "faultline"
 
 
 def test_default_rate_limits():
