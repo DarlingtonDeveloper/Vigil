@@ -28,6 +28,9 @@ services:
       - SURREAL_PASS=root
       - SURREAL_NS=faultline
       - SURREAL_DB=faultline
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-true}
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY:-}
+      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-faultline}
     depends_on:
       surrealdb:
         condition: service_healthy
