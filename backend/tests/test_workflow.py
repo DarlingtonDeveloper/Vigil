@@ -13,69 +13,92 @@ from app.graph.workflow import (
     pricing_node,
     run_assessment,
 )
-from app.agents.intake import DeploymentProfile, ToolSpec
-from app.agents.legal import LegalAnalysis, LegalExposure
-from app.agents.technical import TechnicalAnalysis, TechnicalRisk
-from app.agents.mitigation import MitigationAnalysis, MitigationRecommendation
-from app.agents.pricing import PricingResult, RiskScenario
+from app.agents.intake import DeploymentProfile, ToolDescription, VendorInfo
+from app.agents.legal import LegalAnalysis, DoctrineAssessment, RegulatoryGap
+from app.agents.technical import TechnicalAnalysis, FactorScore
+from app.agents.mitigation import MitigationAnalysis, MitigationAxisScore
+from app.agents.pricing import RiskPrice, RiskScenario
 
 
 # -- Fixtures ----------------------------------------------------------------
 
 SAMPLE_PROFILE = DeploymentProfile(
     agent_description="Customer support chatbot",
-    tools=[ToolSpec(name="email_sender", action_type="communicate", description="Sends emails")],
+    tools=[ToolDescription(name="email_sender", action_type="communicate", description="Sends emails")],
     data_access=["customer_records", "order_history"],
-    autonomy_level="semi-autonomous",
-    output_reach="external",
+    autonomy_level="human_on_the_loop",
+    output_reach="customer_facing",
     sector="financial",
     jurisdictions=["UK"],
     human_oversight_model="approval_required",
+    reviewer_qualification="general_operator",
     existing_guardrails=["content_filter"],
+    vendor_info=VendorInfo(provider="Anthropic", model="claude-sonnet-4-20250514",
+                           indemnification="partial", contract_reviewed=True),
+    key_risks_identified=["PII exposure"],
 )
 
 SAMPLE_LEGAL = LegalAnalysis(
     legal_exposure_score=0.65,
-    exposures=[LegalExposure(doctrine="negligence", risk_level="medium", reasoning="AI acts on behalf")],
-    applicable_regulations=["UK AI Act", "GDPR"],
-    compliance_gaps=["No impact assessment"],
-    summary="Moderate legal exposure",
+    doctrine_assessments=[
+        DoctrineAssessment(doctrine_name="negligence", applies=True,
+                           exposure_level="medium", reasoning="AI acts on behalf",
+                           worst_case="Liability for incorrect advice"),
+    ],
+    regulatory_gaps=[
+        RegulatoryGap(regulation="GDPR", requirement="DPIA",
+                      status="non_compliant", risk_if_non_compliant="Fines up to 4% revenue"),
+    ],
+    contract_formation_risk="Medium - agent communicates externally",
+    tort_exposure="Medium - potential for negligent misstatement",
+    key_uncertainties=["Untested AI liability precedent"],
+    confidence=0.7,
 )
 
 SAMPLE_TECHNICAL = TechnicalAnalysis(
     technical_risk_score=0.55,
-    risks=[TechnicalRisk(factor="hallucination", score=0.7, reasoning="LLM may confabulate")],
-    failure_modes=["Incorrect responses"],
-    data_risks=["PII leakage"],
-    summary="Moderate technical risk",
+    factor_scores=[
+        FactorScore(factor_name="hallucination", level="moderate", score=0.7,
+                    reasoning="LLM may confabulate"),
+    ],
+    amplification_effects=["Customer-facing + hallucination = multiplied exposure"],
+    key_vulnerabilities=["PII leakage", "Incorrect responses"],
+    confidence=0.75,
 )
 
 SAMPLE_MITIGATION = MitigationAnalysis(
     overall_mitigation_score=0.4,
-    recommended_mitigations=[
-        MitigationRecommendation(name="human_review", effectiveness=0.8,
-                                 implementation_effort="medium", reasoning="Catches errors")
+    axis_scores=[
+        MitigationAxisScore(axis="architectural", score=0.5,
+                            present_mitigations=["content_filter"],
+                            missing_mitigations=["output_schema"],
+                            critical_gaps=["No confidence threshold"]),
     ],
-    existing_coverage=["content_filter"],
-    gaps=["No audit trail"],
-    summary="Partial mitigation",
+    recommendations=[{"name": "human_review", "priority": "high", "impact": "0.3", "cost": "moderate",
+                       "reasoning": "Catches errors before customer delivery"}],
+    quick_wins=["Add output schema validation"],
+    confidence=0.7,
 )
 
-SAMPLE_PRICING = PricingResult(
+SAMPLE_PRICING = RiskPrice(
+    executive_summary="Moderate risk deployment",
     technical_risk=0.55,
     legal_exposure=0.65,
+    mitigation_effectiveness=0.4,
     overall_risk_score=0.6,
-    premium_band="medium",
+    premium_band="Medium ($15K-$50K/yr)",
+    premium_reasoning="Significant legal exposure partially offset by content filtering",
+    top_exposures=[{"exposure": "negligence", "severity": "medium", "mitigation_available": True}],
+    recommendations=[{"action": "Add human review", "priority": "high", "impact": "0.3",
+                       "reasoning": "Catches errors"}],
     confidence=0.75,
-    executive_summary="Moderate risk deployment",
-    top_exposures=["negligence", "data_breach"],
-    recommendations=["Add human review", "Implement audit trail"],
+    data_gaps=["Vendor contract terms unknown"],
     scenarios=[
         RiskScenario(
             scenario_type="data_breach",
-            probability="medium",
-            severity="high",
-            expected_loss_range="50k-500k GBP",
+            probability="possible",
+            severity="major",
+            expected_loss_range="$50K-$500K",
             applicable_doctrines=["negligence"],
             mitigation_options=["encryption", "access_control"],
         )
@@ -133,10 +156,8 @@ def test_faultline_state_has_all_required_keys():
 def test_build_workflow_returns_compiled_graph():
     """build_workflow() returns a compiled LangGraph with 6 nodes."""
     graph = build_workflow()
-    # The compiled graph should have a nodes dict
     node_names = set(graph.nodes.keys())
     expected_nodes = {"intake", "fetch_knowledge", "legal", "technical", "mitigation", "pricing"}
-    # LangGraph also adds __start__ and __end__ nodes
     assert expected_nodes.issubset(node_names), f"Missing nodes: {expected_nodes - node_names}"
 
 
@@ -170,7 +191,7 @@ async def test_intake_node():
 
     assert result["current_step"] == "intake_complete"
     assert result["deployment_profile"] is not None
-    assert result["deployment_profile"]["autonomy_level"] == "semi-autonomous"
+    assert result["deployment_profile"]["autonomy_level"] == "human_on_the_loop"
     mock_intake.assert_awaited_once()
     assert mock_audit.await_count == 2  # start + complete
     mock_db.query.assert_awaited_once()  # CREATE deployment_profile
@@ -297,7 +318,7 @@ async def test_pricing_node():
         result = await pricing_node(state)
 
     assert result["current_step"] == "complete"
-    assert result["risk_price"]["premium_band"] == "medium"
+    assert "Medium" in result["risk_price"]["premium_band"]
     assert result["risk_price"]["overall_risk_score"] == 0.6
     # DB calls: risk_score CREATE + 1 scenario CREATE + UPDATE assessment
     assert mock_db.query.await_count == 3
@@ -307,14 +328,14 @@ async def test_pricing_node():
 @pytest.mark.asyncio
 async def test_pricing_node_persists_scenarios():
     """Each scenario from pricing result is persisted to SurrealDB."""
-    pricing_with_two = PricingResult(
+    pricing_with_two = RiskPrice(
         **{**SAMPLE_PRICING.model_dump(),
            "scenarios": [
-               RiskScenario(scenario_type="breach", probability="high", severity="high",
-                            expected_loss_range="100k-1M", applicable_doctrines=["negligence"],
+               RiskScenario(scenario_type="breach", probability="likely", severity="catastrophic",
+                            expected_loss_range="$100K-$1M", applicable_doctrines=["negligence"],
                             mitigation_options=["encryption"]),
-               RiskScenario(scenario_type="bias", probability="medium", severity="medium",
-                            expected_loss_range="10k-100k", applicable_doctrines=["discrimination"],
+               RiskScenario(scenario_type="bias", probability="possible", severity="moderate",
+                            expected_loss_range="$10K-$100K", applicable_doctrines=["discrimination"],
                             mitigation_options=["audit"]),
            ]}
     )
@@ -340,12 +361,10 @@ async def test_pricing_node_persists_scenarios():
 @pytest.mark.asyncio
 async def test_audit_trail_for_every_node():
     """Every node should log audit start and complete events."""
-    state = _base_state(deployment_profile=SAMPLE_PROFILE.model_dump())
-
     audit_calls = []
 
-    async def track_audit(sid, step, status, output_data=None):
-        audit_calls.append((step, status))
+    async def track_audit(sid, agent, action, **kwargs):
+        audit_calls.append((agent, action))
 
     with patch("app.graph.workflow.log_audit", side_effect=track_audit), \
          patch("app.graph.workflow.run_intake", new_callable=AsyncMock, return_value=SAMPLE_PROFILE), \
@@ -372,6 +391,8 @@ async def test_run_assessment_full_pipeline():
          patch("app.graph.workflow.get_opik_tracer") as mock_opik, \
          patch("app.graph.workflow.get_langsmith_run_config", return_value={"run_name": "test"}):
 
+        mock_db._conn = True  # Simulate connected state
+        mock_db.connect = AsyncMock()
         mock_db.query = AsyncMock(return_value=[])
         mock_db.get_applicable_doctrines = AsyncMock(return_value=[{"name": "negligence"}])
         mock_db.get_applicable_regulations = AsyncMock(return_value=[{"name": "GDPR"}])
@@ -386,7 +407,7 @@ async def test_run_assessment_full_pipeline():
 
     assert result["current_step"] == "complete"
     assert result["risk_price"] is not None
-    assert result["risk_price"]["premium_band"] == "medium"
+    assert "Medium" in result["risk_price"]["premium_band"]
     assert result["deployment_profile"] is not None
     assert result["legal_analysis"] is not None
     assert result["technical_analysis"] is not None
@@ -404,6 +425,8 @@ async def test_run_assessment_marks_failed_on_error():
          patch("app.graph.workflow.get_opik_tracer") as mock_opik, \
          patch("app.graph.workflow.get_langsmith_run_config", return_value={"run_name": "test"}):
 
+        mock_db._conn = True
+        mock_db.connect = AsyncMock()
         mock_db.query = AsyncMock(return_value=[])
         mock_opik.return_value = MagicMock()
 
@@ -420,39 +443,77 @@ async def test_run_assessment_marks_failed_on_error():
 def test_deployment_profile_model():
     p = DeploymentProfile(
         agent_description="test",
-        tools=[ToolSpec(name="api_caller", action_type="read")],
-        autonomy_level="supervised",
+        tools=[ToolDescription(name="api_caller", action_type="read", description="Reads data")],
+        data_access=["internal"],
+        autonomy_level="human_in_the_loop",
+        output_reach="internal_only",
         sector="financial",
         jurisdictions=["UK"],
+        human_oversight_model=None,
+        reviewer_qualification=None,
+        existing_guardrails=[],
+        vendor_info=None,
+        key_risks_identified=[],
     )
     d = p.model_dump()
-    assert d["autonomy_level"] == "supervised"
+    assert d["autonomy_level"] == "human_in_the_loop"
     assert len(d["tools"]) == 1
 
 
 def test_legal_analysis_model():
-    a = LegalAnalysis(legal_exposure_score=0.7, summary="High exposure")
+    a = LegalAnalysis(
+        legal_exposure_score=0.7,
+        doctrine_assessments=[],
+        regulatory_gaps=[],
+        contract_formation_risk="Low",
+        tort_exposure="Low",
+        key_uncertainties=[],
+        confidence=0.8,
+    )
     assert a.legal_exposure_score == 0.7
-    assert a.model_dump()["summary"] == "High exposure"
+    assert a.confidence == 0.8
 
 
 def test_technical_analysis_model():
-    a = TechnicalAnalysis(technical_risk_score=0.3)
+    a = TechnicalAnalysis(
+        technical_risk_score=0.3,
+        factor_scores=[],
+        amplification_effects=[],
+        key_vulnerabilities=[],
+        confidence=0.9,
+    )
     assert 0.0 <= a.technical_risk_score <= 1.0
 
 
 def test_mitigation_analysis_model():
-    a = MitigationAnalysis(overall_mitigation_score=0.5)
+    a = MitigationAnalysis(
+        overall_mitigation_score=0.5,
+        axis_scores=[],
+        recommendations=[],
+        quick_wins=[],
+        confidence=0.8,
+    )
     assert a.overall_mitigation_score == 0.5
 
 
 def test_pricing_result_model():
-    p = PricingResult(
+    p = RiskPrice(
+        executive_summary="Test",
         overall_risk_score=0.6,
-        premium_band="medium",
-        scenarios=[RiskScenario(scenario_type="breach")],
+        technical_risk=0.5,
+        legal_exposure=0.7,
+        mitigation_effectiveness=0.4,
+        premium_band="Medium ($15K-$50K/yr)",
+        premium_reasoning="Test reasoning",
+        top_exposures=[],
+        scenarios=[RiskScenario(scenario_type="breach", probability="possible",
+                                severity="major", expected_loss_range="$50K-$500K",
+                                applicable_doctrines=[], mitigation_options=[])],
+        recommendations=[],
+        confidence=0.75,
+        data_gaps=[],
     )
-    assert p.premium_band == "medium"
+    assert "Medium" in p.premium_band
     assert len(p.scenarios) == 1
 
 
@@ -479,25 +540,16 @@ def test_langsmith_config():
 # -- DB client tests ---------------------------------------------------------
 
 def test_db_client_initial_state():
-    from app.db.client import DatabaseClient
-    client = DatabaseClient()
-    assert not client.connected
+    from app.db.client import SurrealClient
+    client = SurrealClient()
+    assert client._conn is None
 
 
 @pytest.mark.asyncio
-async def test_db_client_query_connects_lazily():
-    """Calling query when not connected should trigger connect."""
-    from app.db.client import DatabaseClient
-    client = DatabaseClient()
+async def test_db_client_query_raises_when_not_connected():
+    """Calling query when not connected should raise RuntimeError."""
+    from app.db.client import SurrealClient
+    client = SurrealClient()
 
-    with patch.object(client, "connect", new_callable=AsyncMock) as mock_connect:
-        # _db is still None, so query will call connect then fail on _db.query
-        # We need to set _db after connect is called
-        async def set_db():
-            mock_inner = AsyncMock()
-            mock_inner.query = AsyncMock(return_value=[{"result": []}])
-            client._db = mock_inner
-
-        mock_connect.side_effect = set_db
-        result = await client.query("SELECT 1")
-        mock_connect.assert_awaited_once()
+    with pytest.raises(RuntimeError, match="not connected"):
+        await client.query("SELECT 1")

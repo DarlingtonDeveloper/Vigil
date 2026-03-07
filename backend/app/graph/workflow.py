@@ -234,6 +234,9 @@ async def run_assessment(description: str, jurisdictions: list[str], sector: str
                          user_id: str) -> dict:
     session_id = str(uuid.uuid4())
 
+    if not db._conn:
+        await db.connect()
+
     await db.query("""
         CREATE assessment SET
             session_id = $sid, user_id = $uid, deployment_description = $desc,

@@ -21,15 +21,17 @@ def test_backend_app_packages():
 
 def test_backend_stub_files():
     stubs = [
-        "backend/app/agents/enricher.py",
-        "backend/app/agents/connector.py",
-        "backend/app/agents/scenario.py",
-        "backend/app/agents/assessor.py",
+        "backend/app/agents/intake.py",
+        "backend/app/agents/legal.py",
+        "backend/app/agents/technical.py",
+        "backend/app/agents/mitigation.py",
+        "backend/app/agents/pricing.py",
         "backend/app/graph/workflow.py",
         "backend/app/graph/state.py",
         "backend/app/db/client.py",
         "backend/app/db/queries.py",
         "backend/app/db/schema.surql",
+        "backend/app/db/seed.py",
         "backend/app/middleware/auth.py",
         "backend/app/middleware/rate_limit.py",
         "backend/app/middleware/validation.py",
@@ -39,9 +41,9 @@ def test_backend_stub_files():
         "backend/app/tracing/langsmith_setup.py",
         "backend/app/tracing/cost_tracker.py",
         "backend/app/prompts/manager.py",
-        "backend/app/routes/analyze.py",
+        "backend/app/routes/assess.py",
         "backend/app/routes/scenario.py",
-        "backend/app/routes/graph.py",
+        "backend/app/routes/knowledge.py",
         "backend/app/routes/feedback.py",
     ]
     for stub in stubs:
@@ -50,7 +52,7 @@ def test_backend_stub_files():
 
 
 def test_prompt_templates():
-    templates = ["enricher.md", "connector.md", "scenario.md", "assessor.md"]
+    templates = ["intake.md", "legal.md", "technical.md", "mitigation.md", "pricing.md"]
     for name in templates:
         path = ROOT / "backend" / "prompts" / "v1" / name
         assert path.exists(), f"Missing {path}"
@@ -66,8 +68,8 @@ def test_frontend_files():
         "frontend/src/app/page.tsx",
         "frontend/src/app/api/chat/route.ts",
         "frontend/src/components/Chat.tsx",
-        "frontend/src/components/GraphViz.tsx",
-        "frontend/src/components/ScenarioPanel.tsx",
+        "frontend/src/components/KnowledgeGraph.tsx",
+        "frontend/src/components/RiskDashboard.tsx",
         "frontend/src/lib/api.ts",
     ]
     for f in files:

@@ -3,7 +3,7 @@ version: "3.8"
 services:
   surrealdb:
     image: surrealdb/surrealdb:v2.2.1
-    command: start --user root --pass root --bind 0.0.0.0:8000 file:/data/portfoliograph.db
+    command: start --user root --pass root --bind 0.0.0.0:8000 file:/data/faultline.db
     ports:
       - "8000:8000"
     volumes:
@@ -26,8 +26,11 @@ services:
       - SURREAL_URL=ws://surrealdb:8000/rpc
       - SURREAL_USER=root
       - SURREAL_PASS=root
-      - SURREAL_NS=portfoliograph
-      - SURREAL_DB=portfoliograph
+      - SURREAL_NS=faultline
+      - SURREAL_DB=faultline
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-true}
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY:-}
+      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-faultline}
     depends_on:
       surrealdb:
         condition: service_healthy
