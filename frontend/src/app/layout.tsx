@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "PortfolioGraph",
-  description: "Agentic portfolio contagion analyzer",
+  title: "FaultLine",
+  description: "Agentic risk pricing engine for AI agent deployments",
 };
 
 export default function RootLayout({

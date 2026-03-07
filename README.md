@@ -1,6 +1,6 @@
-# PortfolioGraph
+# FaultLine
 
-Agentic portfolio contagion analyzer.
+Agentic risk pricing engine for AI agent deployments.
 
 ## Quick Start
 
