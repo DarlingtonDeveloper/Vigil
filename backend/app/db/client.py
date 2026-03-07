@@ -42,6 +42,8 @@ class SurrealClient:
 
     async def query(self, sql: str, params: dict | None = None) -> list:
         """Execute a SurrealQL query and return results."""
+        if self._conn is None:
+            raise RuntimeError("SurrealDB client not connected. Call connect() first.")
         if params:
             result = await self._conn.query(sql, params)
         else:
