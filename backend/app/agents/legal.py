@@ -19,6 +19,7 @@ from pydantic import BaseModel, ValidationError
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from app.config import settings
+from app.tracing.cost_tracker import track_llm_cost
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,14 @@ async def run_legal_analysis(
         SystemMessage(content=LEGAL_SYSTEM_PROMPT),
         HumanMessage(content=user_msg),
     ])
+
+    # Track cost
+    usage = getattr(response, "usage_metadata", None) or {}
+    if usage:
+        await track_llm_cost(
+            session_id, "legal", "claude-sonnet-4-20250514",
+            usage.get("input_tokens", 0), usage.get("output_tokens", 0),
+        )
 
     raw = _extract_json(response.content)
 

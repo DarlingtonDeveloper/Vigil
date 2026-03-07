@@ -12,7 +12,9 @@ from app.agents.pricing import run_pricing
 from app.db.client import db
 from app.db.queries import log_audit
 from app.tracing.opik_setup import get_opik_tracer
+from app.tracing.opik_evaluator import validate_legal_analysis, validate_technical_analysis, validate_pricing
 from app.tracing.langsmith_setup import get_langsmith_run_config
+from app.tracing.cost_tracker import track_llm_cost
 
 
 async def intake_node(state: FaultLineState) -> dict:
@@ -106,9 +108,17 @@ async def legal_node(state: FaultLineState) -> dict:
         state["applicable_regulations"], sid
     )
 
+    # Quality gate
+    known_doctrines = [d.get("name", "") for d in state.get("applicable_doctrines", [])]
+    eval_result = await validate_legal_analysis(
+        analysis.model_dump(), state["deployment_profile"], known_doctrines, sid
+    )
+
     await log_audit(sid, "legal", "complete",
-                    output_data={"exposure_score": analysis.legal_exposure_score})
-    return {"legal_analysis": analysis.model_dump(), "current_step": "legal_complete"}
+                    output_data={"exposure_score": analysis.legal_exposure_score,
+                                 "quality_score": eval_result.score})
+    return {"legal_analysis": analysis.model_dump(), "legal_quality_score": eval_result.score,
+            "current_step": "legal_complete"}
 
 
 async def technical_node(state: FaultLineState) -> dict:
@@ -119,9 +129,16 @@ async def technical_node(state: FaultLineState) -> dict:
         state["deployment_profile"], state["risk_factors"], sid
     )
 
+    # Quality gate
+    eval_result = await validate_technical_analysis(
+        analysis.model_dump(), state.get("risk_factors", []), sid
+    )
+
     await log_audit(sid, "technical", "complete",
-                    output_data={"risk_score": analysis.technical_risk_score})
-    return {"technical_analysis": analysis.model_dump(), "current_step": "technical_complete"}
+                    output_data={"risk_score": analysis.technical_risk_score,
+                                 "quality_score": eval_result.score})
+    return {"technical_analysis": analysis.model_dump(), "technical_quality_score": eval_result.score,
+            "current_step": "technical_complete"}
 
 
 async def mitigation_node(state: FaultLineState) -> dict:
@@ -145,6 +162,14 @@ async def pricing_node(state: FaultLineState) -> dict:
     price = await run_pricing(
         state["legal_analysis"], state["technical_analysis"],
         state["mitigation_analysis"], state["deployment_profile"], sid
+    )
+
+    # Quality gate
+    legal_score = state.get("legal_analysis", {}).get("legal_exposure_score", 0) if state.get("legal_analysis") else 0
+    tech_score = state.get("technical_analysis", {}).get("technical_risk_score", 0) if state.get("technical_analysis") else 0
+    mit_score = state.get("mitigation_analysis", {}).get("overall_mitigation_score", 0) if state.get("mitigation_analysis") else 0
+    eval_result = await validate_pricing(
+        price.model_dump(), legal_score, tech_score, mit_score, sid
     )
 
     # Store risk score
@@ -207,7 +232,8 @@ async def pricing_node(state: FaultLineState) -> dict:
     await log_audit(sid, "pricing", "complete",
                     output_data={"risk_score": price.overall_risk_score, "premium": price.premium_band})
 
-    return {"risk_price": price.model_dump(), "current_step": "complete"}
+    return {"risk_price": price.model_dump(), "pricing_quality_score": eval_result.score,
+            "current_step": "complete"}
 
 
 def build_workflow():
