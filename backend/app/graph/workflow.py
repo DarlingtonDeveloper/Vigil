@@ -59,6 +59,7 @@ async def intake_node(state: FaultLineState) -> dict:
 async def fetch_knowledge_node(state: FaultLineState) -> dict:
     """Fetch relevant knowledge graph data from SurrealDB for the agents."""
     sid = state["session_id"]
+    await log_audit(sid, "knowledge_fetch", "start")
     profile = state["deployment_profile"]
     jurisdictions = profile.get("jurisdictions", ["UK"])
 

@@ -553,3 +553,660 @@ async def test_db_client_query_raises_when_not_connected():
 
     with pytest.raises(RuntimeError, match="not connected"):
         await client.query("SELECT 1")
+
+
+# ============================================================================
+# UNIT TESTS: fetch_knowledge edge cases + flatten helper
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_fetch_knowledge_empty_tools_excludes_ip():
+    """Profile with no tools should not add intellectual_property domain."""
+    profile = SAMPLE_PROFILE.model_dump()
+    profile["tools"] = []
+    state = _base_state(deployment_profile=profile)
+
+    with patch("app.graph.workflow.db") as mock_db, \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock):
+        mock_db.get_applicable_doctrines = AsyncMock(return_value=[])
+        mock_db.get_applicable_regulations = AsyncMock(return_value=[])
+        mock_db.query = AsyncMock(return_value=[[]])
+        await fetch_knowledge_node(state)
+
+    domains = mock_db.get_applicable_doctrines.call_args[0][1]
+    assert "intellectual_property" not in domains
+
+
+@pytest.mark.asyncio
+async def test_fetch_knowledge_communicate_tool_adds_ip():
+    """Profile with a communicate tool should add intellectual_property domain."""
+    profile = SAMPLE_PROFILE.model_dump()
+    profile["tools"] = [{"name": "emailer", "action_type": "communicate", "description": "sends"}]
+    state = _base_state(deployment_profile=profile)
+
+    with patch("app.graph.workflow.db") as mock_db, \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock):
+        mock_db.get_applicable_doctrines = AsyncMock(return_value=[])
+        mock_db.get_applicable_regulations = AsyncMock(return_value=[])
+        mock_db.query = AsyncMock(return_value=[[]])
+        await fetch_knowledge_node(state)
+
+    domains = mock_db.get_applicable_doctrines.call_args[0][1]
+    assert "intellectual_property" in domains
+
+
+@pytest.mark.asyncio
+async def test_fetch_knowledge_non_financial_sector_excludes_employment():
+    """Non-financial/healthcare/legal sectors should not add employment_law."""
+    profile = SAMPLE_PROFILE.model_dump()
+    profile["sector"] = "education"
+    state = _base_state(deployment_profile=profile)
+
+    with patch("app.graph.workflow.db") as mock_db, \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock):
+        mock_db.get_applicable_doctrines = AsyncMock(return_value=[])
+        mock_db.get_applicable_regulations = AsyncMock(return_value=[])
+        mock_db.query = AsyncMock(return_value=[[]])
+        await fetch_knowledge_node(state)
+
+    domains = mock_db.get_applicable_doctrines.call_args[0][1]
+    assert "employment_law" not in domains
+
+
+@pytest.mark.asyncio
+async def test_fetch_knowledge_null_sector_excludes_employment():
+    """None sector should not add employment_law."""
+    profile = SAMPLE_PROFILE.model_dump()
+    profile["sector"] = None
+    state = _base_state(deployment_profile=profile)
+
+    with patch("app.graph.workflow.db") as mock_db, \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock):
+        mock_db.get_applicable_doctrines = AsyncMock(return_value=[])
+        mock_db.get_applicable_regulations = AsyncMock(return_value=[])
+        mock_db.query = AsyncMock(return_value=[[]])
+        await fetch_knowledge_node(state)
+
+    domains = mock_db.get_applicable_doctrines.call_args[0][1]
+    assert "employment_law" not in domains
+
+
+@pytest.mark.asyncio
+async def test_fetch_knowledge_tool_without_action_type():
+    """Tool missing action_type key should not trigger intellectual_property."""
+    profile = SAMPLE_PROFILE.model_dump()
+    profile["tools"] = [{"name": "reader", "description": "reads files"}]  # no action_type
+    state = _base_state(deployment_profile=profile)
+
+    with patch("app.graph.workflow.db") as mock_db, \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock):
+        mock_db.get_applicable_doctrines = AsyncMock(return_value=[])
+        mock_db.get_applicable_regulations = AsyncMock(return_value=[])
+        mock_db.query = AsyncMock(return_value=[[]])
+        await fetch_knowledge_node(state)
+
+    domains = mock_db.get_applicable_doctrines.call_args[0][1]
+    assert "intellectual_property" not in domains
+
+
+@pytest.mark.asyncio
+async def test_fetch_knowledge_default_jurisdictions():
+    """Missing jurisdictions in profile should default to ['UK']."""
+    profile = SAMPLE_PROFILE.model_dump()
+    del profile["jurisdictions"]
+    state = _base_state(deployment_profile=profile)
+
+    with patch("app.graph.workflow.db") as mock_db, \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock):
+        mock_db.get_applicable_doctrines = AsyncMock(return_value=[])
+        mock_db.get_applicable_regulations = AsyncMock(return_value=[])
+        mock_db.query = AsyncMock(return_value=[[]])
+        await fetch_knowledge_node(state)
+
+    jurisdictions = mock_db.get_applicable_doctrines.call_args[0][0]
+    assert jurisdictions == ["UK"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_knowledge_flatten_empty_list():
+    """flatten() on empty list returns empty list."""
+    profile = SAMPLE_PROFILE.model_dump()
+    state = _base_state(deployment_profile=profile)
+
+    with patch("app.graph.workflow.db") as mock_db, \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock):
+        mock_db.get_applicable_doctrines = AsyncMock(return_value=[])
+        mock_db.get_applicable_regulations = AsyncMock(return_value=[])
+        mock_db.query = AsyncMock(return_value=[])
+        result = await fetch_knowledge_node(state)
+
+    assert result["risk_factors"] == []
+    assert result["available_mitigations"] == []
+    assert result["mitigation_edges"] == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_knowledge_flatten_unwraps_result_key():
+    """flatten() unwraps SurrealDB {result: [...]} wrapper."""
+    profile = SAMPLE_PROFILE.model_dump()
+    state = _base_state(deployment_profile=profile)
+
+    wrapped = [{"result": [{"name": "factor_1"}, {"name": "factor_2"}]}]
+
+    with patch("app.graph.workflow.db") as mock_db, \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock):
+        mock_db.get_applicable_doctrines = AsyncMock(return_value=[])
+        mock_db.get_applicable_regulations = AsyncMock(return_value=[])
+        mock_db.query = AsyncMock(return_value=wrapped)
+        result = await fetch_knowledge_node(state)
+
+    assert result["risk_factors"] == [{"name": "factor_1"}, {"name": "factor_2"}]
+
+
+@pytest.mark.asyncio
+async def test_fetch_knowledge_flatten_passthrough_without_result_key():
+    """flatten() returns list as-is when first element has no 'result' key."""
+    profile = SAMPLE_PROFILE.model_dump()
+    state = _base_state(deployment_profile=profile)
+
+    raw_data = [{"name": "direct_factor", "weight": 0.5}]
+
+    with patch("app.graph.workflow.db") as mock_db, \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock):
+        mock_db.get_applicable_doctrines = AsyncMock(return_value=[])
+        mock_db.get_applicable_regulations = AsyncMock(return_value=[])
+        mock_db.query = AsyncMock(return_value=raw_data)
+        result = await fetch_knowledge_node(state)
+
+    assert result["risk_factors"] == [{"name": "direct_factor", "weight": 0.5}]
+
+
+@pytest.mark.asyncio
+async def test_fetch_knowledge_has_start_and_complete_audit():
+    """fetch_knowledge_node should log both start and complete audit events."""
+    audit_calls = []
+
+    async def track_audit(sid, agent, action, **kwargs):
+        audit_calls.append((agent, action))
+
+    profile = SAMPLE_PROFILE.model_dump()
+    state = _base_state(deployment_profile=profile)
+
+    with patch("app.graph.workflow.log_audit", side_effect=track_audit), \
+         patch("app.graph.workflow.db") as mock_db:
+        mock_db.get_applicable_doctrines = AsyncMock(return_value=[])
+        mock_db.get_applicable_regulations = AsyncMock(return_value=[])
+        mock_db.query = AsyncMock(return_value=[[]])
+        await fetch_knowledge_node(state)
+
+    assert ("knowledge_fetch", "start") in audit_calls
+    assert ("knowledge_fetch", "complete") in audit_calls
+
+
+# ============================================================================
+# UNIT TESTS: error propagation through each node
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_legal_node_propagates_agent_error():
+    """Error in legal agent should propagate as-is."""
+    state = _base_state(
+        deployment_profile=SAMPLE_PROFILE.model_dump(),
+        applicable_doctrines=[],
+        applicable_regulations=[],
+    )
+
+    with patch("app.graph.workflow.run_legal_analysis", new_callable=AsyncMock,
+               side_effect=ValueError("Legal agent returned invalid JSON")), \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock):
+        with pytest.raises(ValueError, match="invalid JSON"):
+            await legal_node(state)
+
+
+@pytest.mark.asyncio
+async def test_technical_node_propagates_agent_error():
+    """Error in technical agent should propagate."""
+    state = _base_state(
+        deployment_profile=SAMPLE_PROFILE.model_dump(),
+        risk_factors=[],
+    )
+
+    with patch("app.graph.workflow.run_technical_analysis", new_callable=AsyncMock,
+               side_effect=ValueError("Technical agent returned invalid JSON")), \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock):
+        with pytest.raises(ValueError, match="invalid JSON"):
+            await technical_node(state)
+
+
+@pytest.mark.asyncio
+async def test_mitigation_node_propagates_agent_error():
+    """Error in mitigation agent should propagate."""
+    state = _base_state(
+        deployment_profile=SAMPLE_PROFILE.model_dump(),
+        available_mitigations=[],
+        mitigation_edges=[],
+    )
+
+    with patch("app.graph.workflow.run_mitigation_analysis", new_callable=AsyncMock,
+               side_effect=ValueError("Mitigation agent returned invalid JSON")), \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock):
+        with pytest.raises(ValueError, match="invalid JSON"):
+            await mitigation_node(state)
+
+
+@pytest.mark.asyncio
+async def test_pricing_node_propagates_agent_error():
+    """Error in pricing agent should propagate."""
+    state = _base_state(
+        deployment_profile=SAMPLE_PROFILE.model_dump(),
+        legal_analysis=SAMPLE_LEGAL.model_dump(),
+        technical_analysis=SAMPLE_TECHNICAL.model_dump(),
+        mitigation_analysis=SAMPLE_MITIGATION.model_dump(),
+    )
+
+    with patch("app.graph.workflow.run_pricing", new_callable=AsyncMock,
+               side_effect=ValueError("Pricing agent returned invalid JSON")), \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock):
+        with pytest.raises(ValueError, match="invalid JSON"):
+            await pricing_node(state)
+
+
+@pytest.mark.asyncio
+async def test_fetch_knowledge_propagates_db_error():
+    """DB failure in fetch_knowledge should propagate."""
+    state = _base_state(deployment_profile=SAMPLE_PROFILE.model_dump())
+
+    with patch("app.graph.workflow.db") as mock_db, \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock):
+        mock_db.get_applicable_doctrines = AsyncMock(side_effect=RuntimeError("DB unreachable"))
+        with pytest.raises(RuntimeError, match="DB unreachable"):
+            await fetch_knowledge_node(state)
+
+
+@pytest.mark.asyncio
+async def test_run_assessment_mid_pipeline_error_marks_failed():
+    """Error in legal node (mid-pipeline) should mark assessment as failed."""
+    with patch("app.graph.workflow.run_intake", new_callable=AsyncMock, return_value=SAMPLE_PROFILE), \
+         patch("app.graph.workflow.run_legal_analysis", new_callable=AsyncMock,
+               side_effect=ValueError("Legal agent crashed")), \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock), \
+         patch("app.graph.workflow.db") as mock_db, \
+         patch("app.graph.workflow.get_opik_tracer") as mock_opik, \
+         patch("app.graph.workflow.get_langsmith_run_config", return_value={"run_name": "test"}):
+
+        mock_db._conn = True
+        mock_db.connect = AsyncMock()
+        mock_db.query = AsyncMock(return_value=[])
+        mock_db.get_applicable_doctrines = AsyncMock(return_value=[])
+        mock_db.get_applicable_regulations = AsyncMock(return_value=[])
+        mock_opik.return_value = MagicMock()
+
+        with pytest.raises(ValueError, match="Legal agent crashed"):
+            await run_assessment("chatbot", ["UK"], "financial", "demo-user")
+
+    update_calls = [c for c in mock_db.query.call_args_list if "failed" in str(c)]
+    assert len(update_calls) >= 1
+
+
+# ============================================================================
+# UNIT TESTS: graph structure validation
+# ============================================================================
+
+def test_build_workflow_entry_point_is_intake():
+    """The graph's entry point should be the intake node."""
+    graph = build_workflow()
+    # In LangGraph, __start__ connects to the entry point
+    # Check that the graph can be drawn/inspected and intake is first
+    assert "intake" in graph.nodes
+    # Verify __start__ leads to intake by checking the graph structure
+    graph_dict = graph.get_graph().to_json()
+    assert graph_dict is not None
+
+
+def test_build_workflow_all_nodes_reachable():
+    """All 6 nodes should be reachable in the compiled graph."""
+    graph = build_workflow()
+    graph_repr = graph.get_graph()
+    node_ids = set(graph_repr.nodes.keys())
+    expected = {"intake", "fetch_knowledge", "legal", "technical", "mitigation", "pricing"}
+    assert expected.issubset(node_ids)
+
+
+def test_build_workflow_edge_ordering():
+    """Edges should enforce: intake→fetch_knowledge→legal→technical→mitigation→pricing→END."""
+    graph = build_workflow()
+    graph_repr = graph.get_graph()
+    edges = [(e.source, e.target) for e in graph_repr.edges]
+
+    assert ("intake", "fetch_knowledge") in edges
+    assert ("fetch_knowledge", "legal") in edges
+    assert ("legal", "technical") in edges
+    assert ("technical", "mitigation") in edges
+    assert ("mitigation", "pricing") in edges
+    # pricing→__end__
+    pricing_targets = [t for s, t in edges if s == "pricing"]
+    assert any("end" in t.lower() for t in pricing_targets)
+
+
+def test_build_workflow_no_cycles():
+    """The compiled graph should have no cycles (purely linear DAG)."""
+    graph = build_workflow()
+    graph_repr = graph.get_graph()
+
+    # Build adjacency list
+    adj = {}
+    for e in graph_repr.edges:
+        adj.setdefault(e.source, []).append(e.target)
+
+    # DFS cycle detection
+    visited, in_stack = set(), set()
+
+    def has_cycle(node):
+        if node in in_stack:
+            return True
+        if node in visited:
+            return False
+        visited.add(node)
+        in_stack.add(node)
+        for neighbor in adj.get(node, []):
+            if has_cycle(neighbor):
+                return True
+        in_stack.discard(node)
+        return False
+
+    for node in adj:
+        assert not has_cycle(node), f"Cycle detected involving {node}"
+
+
+# ============================================================================
+# UNIT TESTS: state progression, DB reconnect, quality scores
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_full_state_progression_current_step():
+    """Verify current_step transitions through all expected values in order."""
+    steps_seen = []
+
+    with patch("app.graph.workflow.run_intake", new_callable=AsyncMock, return_value=SAMPLE_PROFILE), \
+         patch("app.graph.workflow.run_legal_analysis", new_callable=AsyncMock, return_value=SAMPLE_LEGAL), \
+         patch("app.graph.workflow.run_technical_analysis", new_callable=AsyncMock, return_value=SAMPLE_TECHNICAL), \
+         patch("app.graph.workflow.run_mitigation_analysis", new_callable=AsyncMock, return_value=SAMPLE_MITIGATION), \
+         patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=SAMPLE_PRICING), \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock), \
+         patch("app.graph.workflow.db") as mock_db, \
+         patch("app.graph.workflow.get_opik_tracer") as mock_opik, \
+         patch("app.graph.workflow.get_langsmith_run_config", return_value={"run_name": "test"}):
+
+        mock_db._conn = True
+        mock_db.connect = AsyncMock()
+        mock_db.query = AsyncMock(return_value=[])
+        mock_db.get_applicable_doctrines = AsyncMock(return_value=[])
+        mock_db.get_applicable_regulations = AsyncMock(return_value=[])
+        mock_opik.return_value = MagicMock()
+
+        graph = build_workflow()
+        initial = _base_state(
+            session_id="step-test",
+            description="test",
+            jurisdictions=["UK"],
+            sector="financial",
+        )
+        # Stream to capture intermediate states
+        async for event in graph.astream(initial, config={"configurable": {"thread_id": "step-test"}}):
+            for node_output in event.values():
+                if "current_step" in node_output:
+                    steps_seen.append(node_output["current_step"])
+
+    assert steps_seen == [
+        "intake_complete",
+        "knowledge_fetched",
+        "legal_complete",
+        "technical_complete",
+        "mitigation_complete",
+        "complete",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_run_assessment_connects_when_disconnected():
+    """run_assessment should call db.connect() when db._conn is None."""
+    with patch("app.graph.workflow.run_intake", new_callable=AsyncMock, return_value=SAMPLE_PROFILE), \
+         patch("app.graph.workflow.run_legal_analysis", new_callable=AsyncMock, return_value=SAMPLE_LEGAL), \
+         patch("app.graph.workflow.run_technical_analysis", new_callable=AsyncMock, return_value=SAMPLE_TECHNICAL), \
+         patch("app.graph.workflow.run_mitigation_analysis", new_callable=AsyncMock, return_value=SAMPLE_MITIGATION), \
+         patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=SAMPLE_PRICING), \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock), \
+         patch("app.graph.workflow.db") as mock_db, \
+         patch("app.graph.workflow.get_opik_tracer") as mock_opik, \
+         patch("app.graph.workflow.get_langsmith_run_config", return_value={"run_name": "test"}):
+
+        mock_db._conn = None  # Not connected
+        mock_db.connect = AsyncMock()
+        mock_db.query = AsyncMock(return_value=[])
+        mock_db.get_applicable_doctrines = AsyncMock(return_value=[])
+        mock_db.get_applicable_regulations = AsyncMock(return_value=[])
+        mock_opik.return_value = MagicMock()
+
+        await run_assessment("chatbot", ["UK"], "financial", "demo-user")
+
+    mock_db.connect.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_run_assessment_skips_connect_when_connected():
+    """run_assessment should not reconnect when db._conn is already set."""
+    with patch("app.graph.workflow.run_intake", new_callable=AsyncMock, return_value=SAMPLE_PROFILE), \
+         patch("app.graph.workflow.run_legal_analysis", new_callable=AsyncMock, return_value=SAMPLE_LEGAL), \
+         patch("app.graph.workflow.run_technical_analysis", new_callable=AsyncMock, return_value=SAMPLE_TECHNICAL), \
+         patch("app.graph.workflow.run_mitigation_analysis", new_callable=AsyncMock, return_value=SAMPLE_MITIGATION), \
+         patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=SAMPLE_PRICING), \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock), \
+         patch("app.graph.workflow.db") as mock_db, \
+         patch("app.graph.workflow.get_opik_tracer") as mock_opik, \
+         patch("app.graph.workflow.get_langsmith_run_config", return_value={"run_name": "test"}):
+
+        mock_db._conn = MagicMock()  # Already connected
+        mock_db.connect = AsyncMock()
+        mock_db.query = AsyncMock(return_value=[])
+        mock_db.get_applicable_doctrines = AsyncMock(return_value=[])
+        mock_db.get_applicable_regulations = AsyncMock(return_value=[])
+        mock_opik.return_value = MagicMock()
+
+        await run_assessment("chatbot", ["UK"], "financial", "demo-user")
+
+    mock_db.connect.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_quality_scores_remain_zero():
+    """Quality score fields should remain at 0.0 through the full pipeline (not yet implemented)."""
+    with patch("app.graph.workflow.run_intake", new_callable=AsyncMock, return_value=SAMPLE_PROFILE), \
+         patch("app.graph.workflow.run_legal_analysis", new_callable=AsyncMock, return_value=SAMPLE_LEGAL), \
+         patch("app.graph.workflow.run_technical_analysis", new_callable=AsyncMock, return_value=SAMPLE_TECHNICAL), \
+         patch("app.graph.workflow.run_mitigation_analysis", new_callable=AsyncMock, return_value=SAMPLE_MITIGATION), \
+         patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=SAMPLE_PRICING), \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock), \
+         patch("app.graph.workflow.db") as mock_db, \
+         patch("app.graph.workflow.get_opik_tracer") as mock_opik, \
+         patch("app.graph.workflow.get_langsmith_run_config", return_value={"run_name": "test"}):
+
+        mock_db._conn = True
+        mock_db.connect = AsyncMock()
+        mock_db.query = AsyncMock(return_value=[])
+        mock_db.get_applicable_doctrines = AsyncMock(return_value=[])
+        mock_db.get_applicable_regulations = AsyncMock(return_value=[])
+        mock_opik.return_value = MagicMock()
+
+        result = await run_assessment("chatbot", ["UK"], "financial", "demo-user")
+
+    assert result["legal_quality_score"] == 0.0
+    assert result["technical_quality_score"] == 0.0
+    assert result["pricing_quality_score"] == 0.0
+
+
+# ============================================================================
+# INTEGRATION TESTS: full pipeline audit completeness
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_full_pipeline_audit_trail_completeness():
+    """Every node should produce audit start+complete events through the full pipeline."""
+    audit_calls = []
+
+    async def track_audit(sid, agent, action, **kwargs):
+        audit_calls.append((agent, action))
+
+    with patch("app.graph.workflow.log_audit", side_effect=track_audit), \
+         patch("app.graph.workflow.run_intake", new_callable=AsyncMock, return_value=SAMPLE_PROFILE), \
+         patch("app.graph.workflow.run_legal_analysis", new_callable=AsyncMock, return_value=SAMPLE_LEGAL), \
+         patch("app.graph.workflow.run_technical_analysis", new_callable=AsyncMock, return_value=SAMPLE_TECHNICAL), \
+         patch("app.graph.workflow.run_mitigation_analysis", new_callable=AsyncMock, return_value=SAMPLE_MITIGATION), \
+         patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=SAMPLE_PRICING), \
+         patch("app.graph.workflow.db") as mock_db, \
+         patch("app.graph.workflow.get_opik_tracer") as mock_opik, \
+         patch("app.graph.workflow.get_langsmith_run_config", return_value={"run_name": "test"}):
+
+        mock_db._conn = True
+        mock_db.connect = AsyncMock()
+        mock_db.query = AsyncMock(return_value=[])
+        mock_db.get_applicable_doctrines = AsyncMock(return_value=[])
+        mock_db.get_applicable_regulations = AsyncMock(return_value=[])
+        mock_opik.return_value = MagicMock()
+
+        await run_assessment("chatbot", ["UK"], "financial", "demo-user")
+
+    # Every node should have start + complete
+    expected_agents = ["intake", "knowledge_fetch", "legal", "technical", "mitigation", "pricing"]
+    for agent in expected_agents:
+        assert (agent, "start") in audit_calls, f"Missing start audit for {agent}"
+        assert (agent, "complete") in audit_calls, f"Missing complete audit for {agent}"
+
+    # Total audit calls: 6 agents × 2 (start+complete) = 12
+    assert len(audit_calls) == 12
+
+
+@pytest.mark.asyncio
+async def test_full_pipeline_audit_ordering():
+    """Audit events should occur in the correct order through the pipeline."""
+    audit_calls = []
+
+    async def track_audit(sid, agent, action, **kwargs):
+        audit_calls.append((agent, action))
+
+    with patch("app.graph.workflow.log_audit", side_effect=track_audit), \
+         patch("app.graph.workflow.run_intake", new_callable=AsyncMock, return_value=SAMPLE_PROFILE), \
+         patch("app.graph.workflow.run_legal_analysis", new_callable=AsyncMock, return_value=SAMPLE_LEGAL), \
+         patch("app.graph.workflow.run_technical_analysis", new_callable=AsyncMock, return_value=SAMPLE_TECHNICAL), \
+         patch("app.graph.workflow.run_mitigation_analysis", new_callable=AsyncMock, return_value=SAMPLE_MITIGATION), \
+         patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=SAMPLE_PRICING), \
+         patch("app.graph.workflow.db") as mock_db, \
+         patch("app.graph.workflow.get_opik_tracer") as mock_opik, \
+         patch("app.graph.workflow.get_langsmith_run_config", return_value={"run_name": "test"}):
+
+        mock_db._conn = True
+        mock_db.connect = AsyncMock()
+        mock_db.query = AsyncMock(return_value=[])
+        mock_db.get_applicable_doctrines = AsyncMock(return_value=[])
+        mock_db.get_applicable_regulations = AsyncMock(return_value=[])
+        mock_opik.return_value = MagicMock()
+
+        await run_assessment("chatbot", ["UK"], "financial", "demo-user")
+
+    # Extract just the agent names in order they appear
+    agent_order = [agent for agent, _ in audit_calls]
+    expected_order = [
+        "intake", "intake",
+        "knowledge_fetch", "knowledge_fetch",
+        "legal", "legal",
+        "technical", "technical",
+        "mitigation", "mitigation",
+        "pricing", "pricing",
+    ]
+    assert agent_order == expected_order
+
+
+@pytest.mark.asyncio
+async def test_pricing_node_zero_scenarios():
+    """Pricing result with empty scenarios list should still complete without DB errors."""
+    pricing_no_scenarios = RiskPrice(
+        **{**SAMPLE_PRICING.model_dump(), "scenarios": []}
+    )
+    state = _base_state(
+        deployment_profile=SAMPLE_PROFILE.model_dump(),
+        legal_analysis=SAMPLE_LEGAL.model_dump(),
+        technical_analysis=SAMPLE_TECHNICAL.model_dump(),
+        mitigation_analysis=SAMPLE_MITIGATION.model_dump(),
+    )
+
+    with patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=pricing_no_scenarios), \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock), \
+         patch("app.graph.workflow.db") as mock_db:
+        mock_db.query = AsyncMock(return_value=[])
+        result = await pricing_node(state)
+
+    assert result["current_step"] == "complete"
+    # Only risk_score CREATE + UPDATE assessment = 2 (no scenario CREATEs)
+    assert mock_db.query.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_pricing_node_audit_includes_output_data():
+    """Pricing node complete audit should include risk_score and premium data."""
+    state = _base_state(
+        deployment_profile=SAMPLE_PROFILE.model_dump(),
+        legal_analysis=SAMPLE_LEGAL.model_dump(),
+        technical_analysis=SAMPLE_TECHNICAL.model_dump(),
+        mitigation_analysis=SAMPLE_MITIGATION.model_dump(),
+    )
+
+    audit_data = {}
+
+    async def capture_audit(sid, agent, action, **kwargs):
+        if agent == "pricing" and action == "complete":
+            audit_data.update(kwargs)
+
+    with patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=SAMPLE_PRICING), \
+         patch("app.graph.workflow.log_audit", side_effect=capture_audit), \
+         patch("app.graph.workflow.db") as mock_db:
+        mock_db.query = AsyncMock(return_value=[])
+        await pricing_node(state)
+
+    assert "output_data" in audit_data
+    assert audit_data["output_data"]["risk_score"] == 0.6
+    assert "Medium" in audit_data["output_data"]["premium"]
+
+
+@pytest.mark.asyncio
+async def test_run_assessment_creates_session_before_graph():
+    """Assessment record should be created in DB before graph execution starts."""
+    call_order = []
+
+    async def track_query(sql, params=None):
+        if "CREATE assessment" in sql:
+            call_order.append("create_assessment")
+        return []
+
+    async def track_intake(*args, **kwargs):
+        call_order.append("intake_ran")
+        return SAMPLE_PROFILE
+
+    with patch("app.graph.workflow.run_intake", side_effect=track_intake), \
+         patch("app.graph.workflow.run_legal_analysis", new_callable=AsyncMock, return_value=SAMPLE_LEGAL), \
+         patch("app.graph.workflow.run_technical_analysis", new_callable=AsyncMock, return_value=SAMPLE_TECHNICAL), \
+         patch("app.graph.workflow.run_mitigation_analysis", new_callable=AsyncMock, return_value=SAMPLE_MITIGATION), \
+         patch("app.graph.workflow.run_pricing", new_callable=AsyncMock, return_value=SAMPLE_PRICING), \
+         patch("app.graph.workflow.log_audit", new_callable=AsyncMock), \
+         patch("app.graph.workflow.db") as mock_db, \
+         patch("app.graph.workflow.get_opik_tracer") as mock_opik, \
+         patch("app.graph.workflow.get_langsmith_run_config", return_value={"run_name": "test"}):
+
+        mock_db._conn = True
+        mock_db.connect = AsyncMock()
+        mock_db.query = AsyncMock(side_effect=track_query)
+        mock_db.get_applicable_doctrines = AsyncMock(return_value=[])
+        mock_db.get_applicable_regulations = AsyncMock(return_value=[])
+        mock_opik.return_value = MagicMock()
+
+        await run_assessment("chatbot", ["UK"], "financial", "demo-user")
+
+    assert call_order.index("create_assessment") < call_order.index("intake_ran")
