@@ -1,1 +1,0 @@
--- SPEC-02: SurrealDB schema will be defined here
