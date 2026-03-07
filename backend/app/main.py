@@ -29,8 +29,14 @@ app.add_middleware(
 )
 
 
+from app.routes import assess, scenario, knowledge, feedback
+
+app.include_router(assess.router)
+app.include_router(scenario.router)
+app.include_router(knowledge.router)
+app.include_router(feedback.router)
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-
-# Routes will be added in SPEC-08
