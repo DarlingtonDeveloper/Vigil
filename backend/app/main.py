@@ -2,8 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
-    title="PortfolioGraph",
-    description="Agentic portfolio contagion analyzer",
+    title="FaultLine",
+    description="Agentic risk pricing engine for AI agent deployments",
     version="0.1.0",
 )
 
