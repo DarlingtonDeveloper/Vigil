@@ -1,6 +1,9 @@
+import logging
 import uuid
 
 from langgraph.graph import StateGraph, END
+
+logger = logging.getLogger(__name__)
 from langgraph.checkpoint.memory import MemorySaver
 
 from app.graph.state import VigilState
@@ -12,8 +15,7 @@ from app.agents.pricing import run_pricing
 from app.db.client import db
 from app.db.queries import log_audit
 from app.tracing.opik_setup import get_opik_tracer
-from app.tracing.opik_evaluator import validate_legal_analysis, validate_technical_analysis, validate_pricing
-from app.tracing.langsmith_setup import get_langsmith_run_config
+from app.tracing.opik_evaluator import validate_legal_analysis, validate_technical_analysis, validate_pricing, auto_evaluate_session
 from app.tracing.cost_tracker import track_llm_cost
 
 
@@ -81,11 +83,15 @@ async def fetch_knowledge_node(state: VigilState) -> dict:
         FROM mitigates
     """)
 
-    # Flatten results
+    # Flatten results and convert RecordID objects to strings
     def flatten(r):
         if r and isinstance(r, list) and r[0] and isinstance(r[0], dict):
-            return r[0].get("result", r) if "result" in r[0] else r
-        return r or []
+            items = r[0].get("result", r) if "result" in r[0] else r
+        else:
+            items = r or []
+        # Convert any non-serializable types to strings
+        import json as _json
+        return _json.loads(_json.dumps(items, default=str))
 
     await log_audit(sid, "knowledge_fetch", "complete")
 
@@ -232,6 +238,23 @@ async def pricing_node(state: VigilState) -> dict:
     await log_audit(sid, "pricing", "complete",
                     output_data={"risk_score": price.overall_risk_score, "premium": price.premium_band})
 
+    # Run LLM-as-Judge evaluators on completed assessment
+    full_state = {
+        "description": state.get("description", ""),
+        "legal_analysis": state.get("legal_analysis", {}),
+        "technical_analysis": state.get("technical_analysis", {}),
+        "mitigation_analysis": state.get("mitigation_analysis", {}),
+        "risk_price": price.model_dump(),
+        "legal_quality_score": state.get("legal_quality_score", 0),
+        "technical_quality_score": state.get("technical_quality_score", 0),
+        "pricing_quality_score": eval_result.score,
+    }
+    try:
+        eval_summary = await auto_evaluate_session(sid, full_state)
+        logger.info("Session %s evaluation: %s", sid[:8], eval_summary)
+    except Exception as e:
+        logger.warning("Session evaluation failed (non-blocking): %s", e)
+
     return {"risk_price": price.model_dump(), "pricing_quality_score": eval_result.score,
             "current_step": "complete"}
 
@@ -283,8 +306,13 @@ async def run_assessment(description: str, jurisdictions: list[str], sector: str
 
     graph = build_workflow()
     opik_tracer = get_opik_tracer(session_id, ["full-assessment"])
-    config = {**get_langsmith_run_config(session_id, "full-assessment"),
-              "configurable": {"thread_id": session_id}, "callbacks": [opik_tracer]}
+    config = {
+        "metadata": {"session_id": session_id, "agent": "full-assessment", "project": "vigil"},
+        "tags": ["vigil", "full-assessment"],
+        "run_name": f"vigil-full-assessment-{session_id[:8]}",
+        "configurable": {"thread_id": session_id},
+        "callbacks": [opik_tracer],
+    }
 
     try:
         return await graph.ainvoke(initial_state, config=config)

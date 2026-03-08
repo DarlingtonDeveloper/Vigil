@@ -15,10 +15,12 @@ from app.config import settings
 
 def init_opik():
     """Initialize Opik. Call once at app startup."""
+    if not settings.opik_api_key:
+        raise ValueError("OPIK_API_KEY not set — skipping Opik initialization")
     opik.configure(
         api_key=settings.opik_api_key,
         workspace=settings.opik_workspace,
-        project_name=settings.opik_project_name,
+        force=True,
     )
 
 
@@ -38,8 +40,8 @@ def get_opik_tracer(session_id: str = "", tags: list[str] | None = None) -> Opik
 
 def track_graph(compiled_graph):
     """
-    Wrap a compiled LangGraph with Opik tracing using track_langgraph.
-    All subsequent invocations are automatically traced.
+    Wrap a compiled LangGraph with Opik tracing.
+    Returns the graph unchanged — tracing is handled via OpikTracer callbacks
+    passed at invocation time rather than by wrapping the graph.
     """
-    from opik.integrations.langgraph import track_langgraph
-    return track_langgraph(compiled_graph)
+    return compiled_graph

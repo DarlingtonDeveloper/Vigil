@@ -17,12 +17,18 @@ async def seed_knowledge_graph():
     """Seed all knowledge graph tables. Idempotent."""
     existing = await db.query("SELECT count() FROM legal_domain GROUP ALL")
     count = 0
-    if existing and existing[0].get("result"):
-        result = existing[0]["result"]
-        if isinstance(result, list) and len(result) > 0:
-            count = result[0].get("count", 0)
+    if existing:
+        first = existing[0] if isinstance(existing, list) else existing
+        if isinstance(first, dict):
+            # SurrealDB returns [{'count': N}] directly
+            count = first.get("count", 0)
+            # Or wrapped: [{'result': [{'count': N}]}]
+            if not count and "result" in first:
+                result = first["result"]
+                if isinstance(result, list) and result:
+                    count = result[0].get("count", 0)
     if count > 0:
-        print("Knowledge graph already seeded, skipping.")
+        print(f"Knowledge graph already seeded ({count} legal domains), skipping.")
         return
 
     print("Seeding knowledge graph...")

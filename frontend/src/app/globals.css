@@ -1,5 +1,73 @@
 @import "tailwindcss";
 
+@theme {
+  --color-void: #06060a;
+  --color-surface: #0c0d13;
+  --color-elevated: #131420;
+  --color-panel: #191b28;
+
+  --color-edge: #1f2133;
+  --color-edge-strong: #2d2f44;
+
+  --color-primary: #e0e0e8;
+  --color-secondary: #7c7d94;
+  --color-muted: #464862;
+  --color-faint: #2a2b3d;
+
+  --color-gold: #c8a74e;
+  --color-safe: #34d399;
+  --color-warn: #f59e0b;
+  --color-danger: #ef4444;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #252638 transparent;
+}
+*::-webkit-scrollbar { width: 5px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: #252638; border-radius: 3px; }
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: var(--color-void);
+  color: var(--color-primary);
+  font-family: var(--font-sans, "Manrope"), sans-serif;
+}
+
+/* ── Animations ─────────────────────────── */
+/* Easing: cubic-bezier(0.25, 1, 0.5, 1) per design system */
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.2; }
+  50%      { opacity: 0.7; }
+}
+
+@keyframes ring-expand {
+  0%   { transform: translate(-50%, -50%) scale(0.85); opacity: 0.1; }
+  100% { transform: translate(-50%, -50%) scale(1.3);  opacity: 0; }
+}
+
+@keyframes score-reveal {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }

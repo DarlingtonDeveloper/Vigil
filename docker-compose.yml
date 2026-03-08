@@ -3,6 +3,7 @@ version: "3.8"
 services:
   surrealdb:
     image: surrealdb/surrealdb:v2.2.1
+    user: root
     command: start --user root --pass root --bind 0.0.0.0:8000 file:/data/vigil.db
     ports:
       - "8000:8000"

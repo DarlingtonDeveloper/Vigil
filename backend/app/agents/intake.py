@@ -11,13 +11,11 @@ and extracts structured data about:
 - What guardrails are in place
 - Vendor/model information
 """
-import json
 import logging
-from pydantic import BaseModel, ValidationError
-from langchain_anthropic import ChatAnthropic
+from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, SystemMessage
-from app.config import settings
-from app.tracing.cost_tracker import track_llm_cost
+from app.agents.llm import invoke_structured
+from app.prompts.manager import get_active_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -81,27 +79,14 @@ Be thorough in extraction. If information is not provided, note it as missing â€
 Respond with valid JSON matching the DeploymentProfile schema."""
 
 
-def _extract_json(content: str) -> str:
-    """Extract JSON from LLM response, handling markdown code fences."""
-    if "```json" in content:
-        content = content.split("```json")[1].split("```")[0]
-    elif "```" in content:
-        content = content.split("```")[1].split("```")[0]
-    return content.strip()
-
-
 async def run_intake(
     description: str,
     jurisdictions: list[str],
     sector: str | None,
     session_id: str,
 ) -> DeploymentProfile:
-    llm = ChatAnthropic(
-        model="claude-sonnet-4-20250514",
-        temperature=0,
-        max_tokens=4096,
-        api_key=settings.anthropic_api_key,
-    )
+    system_prompt = await get_active_prompt("intake") or INTAKE_SYSTEM_PROMPT
+
     user_msg = f"""Parse this agentic deployment description and extract the structured risk profile:
 
 DEPLOYMENT DESCRIPTION:
@@ -110,29 +95,8 @@ DEPLOYMENT DESCRIPTION:
 STATED JURISDICTIONS: {', '.join(jurisdictions)}
 STATED SECTOR: {sector or 'not specified'}"""
 
-    response = await llm.ainvoke([
-        SystemMessage(content=INTAKE_SYSTEM_PROMPT),
-        HumanMessage(content=user_msg),
-    ])
-
-    # Track cost
-    usage = getattr(response, "usage_metadata", None) or {}
-    if usage:
-        await track_llm_cost(
-            session_id, "intake", "claude-sonnet-4-20250514",
-            usage.get("input_tokens", 0), usage.get("output_tokens", 0),
-        )
-
-    raw = _extract_json(response.content)
-
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as e:
-        logger.error("Intake agent returned invalid JSON: %s", e)
-        raise ValueError(f"Intake agent returned invalid JSON: {e}") from e
-
-    try:
-        return DeploymentProfile(**parsed)
-    except ValidationError as e:
-        logger.error("Intake agent output failed validation: %s", e)
-        raise ValueError(f"Intake agent output failed validation: {e}") from e
+    return await invoke_structured(
+        DeploymentProfile,
+        [SystemMessage(content=system_prompt), HumanMessage(content=user_msg)],
+        "Intake agent",
+    )

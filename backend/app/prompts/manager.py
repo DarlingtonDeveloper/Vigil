@@ -2,90 +2,35 @@
 Prompt Version Manager.
 
 Stores prompt templates in SurrealDB with version tracking.
+Syncs to Opik prompt library for dashboard visibility and A/B testing.
 Each agent (intake, legal, technical, mitigation, pricing) has versioned prompts.
 The active version is used at runtime. Previous versions can be rolled back to.
 Performance scores from evaluations are linked back to prompt versions.
 """
+import logging
+
+import opik
+
 from app.db.client import db
 
-DEFAULT_PROMPTS = {
-    "intake": """You are the Intake Agent for Vigil, an AI risk pricing engine.
+logger = logging.getLogger(__name__)
 
-A company is describing an agentic AI system they want to deploy (or have deployed). Your job is to extract structured data about the deployment that will feed into legal and technical risk assessment.
 
-From the description, extract:
-1. agent_description: Concise summary of what the agent does
-2. tools: List of tools/actions with name, action_type (read/write/communicate/transact), description, risk_note
-3. data_access: Data types accessible — public, internal, PII, financial, health, legal_privileged
-4. autonomy_level: human_in_command / human_in_the_loop / human_on_the_loop / fully_autonomous
-5. output_reach: internal_only / customer_facing / public_facing / legally_binding
-6. sector: financial / healthcare / legal / education / employment / general
-7. jurisdictions: Where it operates
-8. human_oversight_model: Who reviews and how
-9. reviewer_qualification: domain_expert / general_operator / none
-10. existing_guardrails: Safety measures in place
-11. vendor_info: AI provider, model, indemnification status
-12. key_risks_identified: Initial observations
+def _get_default_prompts() -> dict[str, str]:
+    """Import the canonical system prompts from each agent module."""
+    from app.agents.intake import INTAKE_SYSTEM_PROMPT
+    from app.agents.legal import LEGAL_SYSTEM_PROMPT
+    from app.agents.technical import TECHNICAL_SYSTEM_PROMPT
+    from app.agents.mitigation import MITIGATION_SYSTEM_PROMPT
+    from app.agents.pricing import PRICING_SYSTEM_PROMPT
 
-If information is not provided, note it as missing — missing information is itself a risk signal.
-Respond with valid JSON matching the DeploymentProfile schema.""",
-
-    "legal": """You are the Legal Analyst Agent for Vigil, an AI risk pricing engine.
-
-You assess the legal exposure of an agentic AI deployment against specific legal doctrines and regulations from Vigil's knowledge graph.
-
-For each doctrine, assess: applies (bool), exposure_level (high/medium/low/uncertain), reasoning, worst_case.
-For each regulation, assess compliance gaps: requirement, status (compliant/partial/non_compliant/unknown), risk_if_non_compliant.
-
-Key principles:
-- Low precedent clarity INCREASES risk
-- Direction of travel is toward MORE liability
-- Missing information = assume worst case
-- External communication = higher contract/tort exposure
-- Multi-jurisdiction = must meet strictest standard
-
-Respond with valid JSON matching the LegalAnalysis schema.""",
-
-    "technical": """You are the Technical Risk Agent for Vigil, an AI risk pricing engine.
-
-Score the deployment against each risk factor in the taxonomy. Each factor has predefined levels with criteria and scores. Match the deployment to the appropriate level.
-
-Identify amplification effects where factors compound:
-- High autonomy + financial tools = multiplied exposure
-- Customer-facing + hallucination risk = multiplied exposure
-- Multi-jurisdiction + untested precedent = multiplied exposure
-
-The technical risk score is a weighted aggregate adjusted for amplification.
-Respond with valid JSON matching the TechnicalAnalysis schema.""",
-
-    "mitigation": """You are the Mitigation Scorer Agent for Vigil, an AI risk pricing engine.
-
-Score four mitigation axes:
-1. Legal conformity (threshold)
-2. Human oversight (who, authority, cognitive load — rubber-stamping scores worse than no oversight)
-3. Architectural controls (guardrails, scoping, fallbacks)
-4. Evidentiary position (audit trails, incident response)
-
-Recommend improvements with priority, impact, cost, and reasoning specific to THIS deployment.
-Respond with valid JSON matching the MitigationAnalysis schema.""",
-
-    "pricing": """You are the Pricing Agent for Vigil, an AI risk pricing engine.
-
-Synthesize all analyses into a final risk price.
-
-Risk Score = technical_risk × legal_exposure / (1.0 + mitigation_score)
-
-Premium Bands:
-- 0.0-0.2: Very Low ($1K-$5K/yr)
-- 0.2-0.4: Low ($5K-$15K/yr)
-- 0.4-0.6: Medium ($15K-$50K/yr)
-- 0.6-0.8: High ($50K-$200K/yr)
-- 0.8-1.0: Very High ($200K+/yr or uninsurable)
-
-Include top 3-5 scenarios, top 5 recommendations ranked by impact.
-Every recommendation must reference THIS deployment's specific characteristics.
-Respond with valid JSON matching the RiskPrice schema.""",
-}
+    return {
+        "intake": INTAKE_SYSTEM_PROMPT,
+        "legal": LEGAL_SYSTEM_PROMPT,
+        "technical": TECHNICAL_SYSTEM_PROMPT,
+        "mitigation": MITIGATION_SYSTEM_PROMPT,
+        "pricing": PRICING_SYSTEM_PROMPT,
+    }
 
 
 def _extract_records(result) -> list:
@@ -101,9 +46,31 @@ def _extract_records(result) -> list:
     return []
 
 
+def _sync_prompts_to_opik():
+    """Sync all agent prompts to Opik prompt library for versioning and dashboard visibility."""
+    try:
+        client = opik.Opik()
+        for agent_name, template in _get_default_prompts().items():
+            prompt_name = f"vigil-{agent_name}"
+            try:
+                existing = client.get_prompt(name=prompt_name)
+                if existing and existing.prompt == template:
+                    continue  # Already up to date
+            except Exception:
+                pass  # Prompt doesn't exist yet
+            client.create_prompt(
+                name=prompt_name,
+                prompt=template,
+                metadata={"agent": agent_name, "project": "vigil"},
+            )
+            logger.info("Synced prompt to Opik: %s", prompt_name)
+    except Exception as e:
+        logger.warning("Failed to sync prompts to Opik (non-blocking): %s", e)
+
+
 async def seed_default_prompts():
-    """Seed default prompts into SurrealDB if they don't exist. Call once at startup."""
-    for agent_name, template in DEFAULT_PROMPTS.items():
+    """Seed default prompts into SurrealDB and Opik prompt library."""
+    for agent_name, template in _get_default_prompts().items():
         existing = await db.query(
             "SELECT * FROM prompt_version WHERE agent = $agent AND version = 1 LIMIT 1",
             {"agent": agent_name},
@@ -115,6 +82,9 @@ async def seed_default_prompts():
                     active = true, created_at = time::now()
             """, {"agent": agent_name, "template": template})
 
+    # Sync all prompts to Opik prompt library
+    _sync_prompts_to_opik()
+
 
 async def get_active_prompt(agent: str) -> str:
     """Get the currently active prompt template for an agent."""
@@ -125,7 +95,7 @@ async def get_active_prompt(agent: str) -> str:
     records = _extract_records(result)
     if records:
         return records[0]["template"]
-    return DEFAULT_PROMPTS.get(agent, "")
+    return _get_default_prompts().get(agent, "")
 
 
 async def create_prompt_version(agent: str, template: str) -> int:
@@ -151,6 +121,17 @@ async def create_prompt_version(agent: str, template: str) -> int:
             agent = $agent, version = $version, template = $template,
             active = true, created_at = time::now()
     """, {"agent": agent, "version": next_version, "template": template})
+
+    # Sync new version to Opik
+    try:
+        client = opik.Opik()
+        client.create_prompt(
+            name=f"vigil-{agent}",
+            prompt=template,
+            metadata={"agent": agent, "version": next_version, "project": "vigil"},
+        )
+    except Exception as e:
+        logger.warning("Failed to sync prompt v%d to Opik: %s", next_version, e)
 
     return next_version
 

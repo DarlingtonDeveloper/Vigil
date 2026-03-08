@@ -1,20 +1,13 @@
 """
 Mitigation Scorer Agent — Evaluates the deployment's existing mitigations
 and recommends additional ones.
-
-Assesses the four mitigation axes:
-1. Legal conformity (threshold)
-2. Human oversight (who, authority, cognitive load)
-3. Architectural controls (guardrails)
-4. Evidentiary position (audit, documentation)
 """
 import json
 import logging
-from pydantic import BaseModel, ValidationError
-from langchain_anthropic import ChatAnthropic
+from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, SystemMessage
-from app.config import settings
-from app.tracing.cost_tracker import track_llm_cost
+from app.agents.llm import invoke_structured
+from app.prompts.manager import get_active_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +31,7 @@ class MitigationAnalysis(BaseModel):
     overall_mitigation_score: float  # 0.0-1.0
     axis_scores: list[MitigationAxisScore]
     recommendations: list[dict]      # [{name, priority, impact, cost, reasoning}]
-    quick_wins: list[str]            # mitigations that are trivial to implement
+    quick_wins: list[str]
     confidence: float
 
 
@@ -80,27 +73,13 @@ Identify quick wins — mitigations that are trivial to implement but meaningful
 Respond with valid JSON matching the MitigationAnalysis schema."""
 
 
-def _extract_json(content: str) -> str:
-    """Extract JSON from LLM response, handling markdown code fences."""
-    if "```json" in content:
-        content = content.split("```json")[1].split("```")[0]
-    elif "```" in content:
-        content = content.split("```")[1].split("```")[0]
-    return content.strip()
-
-
 async def run_mitigation_analysis(
     profile: dict,
     available_mitigations: list[dict],
     mitigation_edges: list[dict],
     session_id: str,
 ) -> MitigationAnalysis:
-    llm = ChatAnthropic(
-        model="claude-sonnet-4-20250514",
-        temperature=0,
-        max_tokens=4096,
-        api_key=settings.anthropic_api_key,
-    )
+    system_prompt = await get_active_prompt("mitigation") or MITIGATION_SYSTEM_PROMPT
 
     context = json.dumps({
         "deployment_profile": profile,
@@ -110,29 +89,8 @@ async def run_mitigation_analysis(
 
     user_msg = f"Score this deployment's mitigations and recommend improvements:\n\n{context}"
 
-    response = await llm.ainvoke([
-        SystemMessage(content=MITIGATION_SYSTEM_PROMPT),
-        HumanMessage(content=user_msg),
-    ])
-
-    # Track cost
-    usage = getattr(response, "usage_metadata", None) or {}
-    if usage:
-        await track_llm_cost(
-            session_id, "mitigation", "claude-sonnet-4-20250514",
-            usage.get("input_tokens", 0), usage.get("output_tokens", 0),
-        )
-
-    raw = _extract_json(response.content)
-
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as e:
-        logger.error("Mitigation agent returned invalid JSON: %s", e)
-        raise ValueError(f"Mitigation agent returned invalid JSON: {e}") from e
-
-    try:
-        return MitigationAnalysis(**parsed)
-    except ValidationError as e:
-        logger.error("Mitigation agent output failed validation: %s", e)
-        raise ValueError(f"Mitigation agent output failed validation: {e}") from e
+    return await invoke_structured(
+        MitigationAnalysis,
+        [SystemMessage(content=system_prompt), HumanMessage(content=user_msg)],
+        "Mitigation agent",
+    )

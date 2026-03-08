@@ -1,40 +1,36 @@
 """
 Pricing Agent — Synthesizes all analyses into a final risk price.
-
-Takes: legal analysis, technical analysis, mitigation analysis
-Produces: overall risk score, premium band, scenario simulations, executive summary
 """
 import json
 import logging
-from pydantic import BaseModel, ValidationError
-from langchain_anthropic import ChatAnthropic
+from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, SystemMessage
-from app.config import settings
-from app.tracing.cost_tracker import track_llm_cost
+from app.agents.llm import invoke_structured
+from app.prompts.manager import get_active_prompt
 
 logger = logging.getLogger(__name__)
 
 
 class RiskScenario(BaseModel):
-    scenario_type: str           # what goes wrong
-    probability: str             # "likely", "possible", "unlikely", "rare"
-    severity: str                # "catastrophic", "major", "moderate", "minor"
-    expected_loss_range: str     # "$10K-$50K", "$100K-$1M", etc.
+    scenario_type: str
+    probability: str
+    severity: str
+    expected_loss_range: str
     applicable_doctrines: list[str]
     mitigation_options: list[str]
 
 
 class RiskPrice(BaseModel):
     executive_summary: str
-    overall_risk_score: float    # 0.0-1.0
+    overall_risk_score: float
     technical_risk: float
     legal_exposure: float
     mitigation_effectiveness: float
-    premium_band: str            # "low ($5K-$15K/yr)", "medium ($15K-$50K/yr)", etc.
+    premium_band: str
     premium_reasoning: str
-    top_exposures: list[dict]    # [{exposure, severity, mitigation_available}]
+    top_exposures: list[dict]
     scenarios: list[RiskScenario]
-    recommendations: list[dict]  # [{action, priority, impact, reasoning}]
+    recommendations: list[dict]
     confidence: float
     data_gaps: list[str]
 
@@ -75,15 +71,6 @@ Be specific and actionable. Generic advice is useless. Every recommendation shou
 Respond with valid JSON matching the RiskPrice schema."""
 
 
-def _extract_json(content: str) -> str:
-    """Extract JSON from LLM response, handling markdown code fences."""
-    if "```json" in content:
-        content = content.split("```json")[1].split("```")[0]
-    elif "```" in content:
-        content = content.split("```")[1].split("```")[0]
-    return content.strip()
-
-
 async def run_pricing(
     legal_analysis: dict,
     technical_analysis: dict,
@@ -91,12 +78,7 @@ async def run_pricing(
     profile: dict,
     session_id: str,
 ) -> RiskPrice:
-    llm = ChatAnthropic(
-        model="claude-sonnet-4-20250514",
-        temperature=0,
-        max_tokens=8192,
-        api_key=settings.anthropic_api_key,
-    )
+    system_prompt = await get_active_prompt("pricing") or PRICING_SYSTEM_PROMPT
 
     context = json.dumps({
         "deployment_profile": profile,
@@ -107,29 +89,8 @@ async def run_pricing(
 
     user_msg = f"Produce the final risk assessment and price for this deployment:\n\n{context}"
 
-    response = await llm.ainvoke([
-        SystemMessage(content=PRICING_SYSTEM_PROMPT),
-        HumanMessage(content=user_msg),
-    ])
-
-    # Track cost
-    usage = getattr(response, "usage_metadata", None) or {}
-    if usage:
-        await track_llm_cost(
-            session_id, "pricing", "claude-sonnet-4-20250514",
-            usage.get("input_tokens", 0), usage.get("output_tokens", 0),
-        )
-
-    raw = _extract_json(response.content)
-
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as e:
-        logger.error("Pricing agent returned invalid JSON: %s", e)
-        raise ValueError(f"Pricing agent returned invalid JSON: {e}") from e
-
-    try:
-        return RiskPrice(**parsed)
-    except ValidationError as e:
-        logger.error("Pricing agent output failed validation: %s", e)
-        raise ValueError(f"Pricing agent output failed validation: {e}") from e
+    return await invoke_structured(
+        RiskPrice,
+        [SystemMessage(content=system_prompt), HumanMessage(content=user_msg)],
+        "Pricing agent",
+    )

@@ -1,25 +1,13 @@
 """
 Legal Analyst Agent — Assesses legal exposure by querying the knowledge graph
 for applicable doctrines, regulations, and precedent.
-
-This agent receives:
-- The structured deployment profile from Intake
-- Applicable legal doctrines from SurrealDB
-- Applicable regulations from SurrealDB
-
-And produces:
-- A legal exposure score
-- Specific doctrine-based risk assessments
-- Regulatory compliance gaps
-- Key uncertainties and worst-case scenarios
 """
 import json
 import logging
-from pydantic import BaseModel, ValidationError
-from langchain_anthropic import ChatAnthropic
+from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, SystemMessage
-from app.config import settings
-from app.tracing.cost_tracker import track_llm_cost
+from app.agents.llm import invoke_structured
+from app.prompts.manager import get_active_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +31,8 @@ class LegalAnalysis(BaseModel):
     legal_exposure_score: float  # 0.0-1.0
     doctrine_assessments: list[DoctrineAssessment]
     regulatory_gaps: list[RegulatoryGap]
-    contract_formation_risk: str  # assessment of whether agent can form binding contracts
-    tort_exposure: str            # assessment of negligence/misrepresentation risk
+    contract_formation_risk: str
+    tort_exposure: str
     key_uncertainties: list[str]
     confidence: float
 
@@ -79,27 +67,13 @@ Respond with valid JSON matching the LegalAnalysis schema.
 Be specific. Cite the doctrines and regulations by name. Do not be generic."""
 
 
-def _extract_json(content: str) -> str:
-    """Extract JSON from LLM response, handling markdown code fences."""
-    if "```json" in content:
-        content = content.split("```json")[1].split("```")[0]
-    elif "```" in content:
-        content = content.split("```")[1].split("```")[0]
-    return content.strip()
-
-
 async def run_legal_analysis(
     profile: dict,
     applicable_doctrines: list[dict],
     applicable_regulations: list[dict],
     session_id: str,
 ) -> LegalAnalysis:
-    llm = ChatAnthropic(
-        model="claude-sonnet-4-20250514",
-        temperature=0,
-        max_tokens=8192,
-        api_key=settings.anthropic_api_key,
-    )
+    system_prompt = await get_active_prompt("legal") or LEGAL_SYSTEM_PROMPT
 
     context = json.dumps({
         "deployment_profile": profile,
@@ -109,29 +83,8 @@ async def run_legal_analysis(
 
     user_msg = f"Assess the legal exposure of this agentic deployment:\n\n{context}"
 
-    response = await llm.ainvoke([
-        SystemMessage(content=LEGAL_SYSTEM_PROMPT),
-        HumanMessage(content=user_msg),
-    ])
-
-    # Track cost
-    usage = getattr(response, "usage_metadata", None) or {}
-    if usage:
-        await track_llm_cost(
-            session_id, "legal", "claude-sonnet-4-20250514",
-            usage.get("input_tokens", 0), usage.get("output_tokens", 0),
-        )
-
-    raw = _extract_json(response.content)
-
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as e:
-        logger.error("Legal agent returned invalid JSON: %s", e)
-        raise ValueError(f"Legal agent returned invalid JSON: {e}") from e
-
-    try:
-        return LegalAnalysis(**parsed)
-    except ValidationError as e:
-        logger.error("Legal agent output failed validation: %s", e)
-        raise ValueError(f"Legal agent output failed validation: {e}") from e
+    return await invoke_structured(
+        LegalAnalysis,
+        [SystemMessage(content=system_prompt), HumanMessage(content=user_msg)],
+        "Legal agent",
+    )

@@ -4,11 +4,10 @@ against the risk factor taxonomy in the knowledge graph.
 """
 import json
 import logging
-from pydantic import BaseModel, ValidationError
-from langchain_anthropic import ChatAnthropic
+from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, SystemMessage
-from app.config import settings
-from app.tracing.cost_tracker import track_llm_cost
+from app.agents.llm import invoke_structured
+from app.prompts.manager import get_active_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -18,13 +17,13 @@ class FactorScore(BaseModel):
     level: str                   # which level from the taxonomy
     score: float                 # 0.0-1.0
     reasoning: str
-    missing_info: str | None = None  # what information would improve this assessment
+    missing_info: str | None = None
 
 
 class TechnicalAnalysis(BaseModel):
     technical_risk_score: float  # 0.0-1.0 weighted aggregate
     factor_scores: list[FactorScore]
-    amplification_effects: list[str]  # where risk factors compound each other
+    amplification_effects: list[str]
     key_vulnerabilities: list[str]
     confidence: float
 
@@ -50,26 +49,12 @@ The technical risk score is a weighted aggregate of all factor scores, adjusted 
 Respond with valid JSON matching the TechnicalAnalysis schema."""
 
 
-def _extract_json(content: str) -> str:
-    """Extract JSON from LLM response, handling markdown code fences."""
-    if "```json" in content:
-        content = content.split("```json")[1].split("```")[0]
-    elif "```" in content:
-        content = content.split("```")[1].split("```")[0]
-    return content.strip()
-
-
 async def run_technical_analysis(
     profile: dict,
     risk_factors: list[dict],
     session_id: str,
 ) -> TechnicalAnalysis:
-    llm = ChatAnthropic(
-        model="claude-sonnet-4-20250514",
-        temperature=0,
-        max_tokens=4096,
-        api_key=settings.anthropic_api_key,
-    )
+    system_prompt = await get_active_prompt("technical") or TECHNICAL_SYSTEM_PROMPT
 
     context = json.dumps({
         "deployment_profile": profile,
@@ -78,29 +63,8 @@ async def run_technical_analysis(
 
     user_msg = f"Score this deployment against the technical risk taxonomy:\n\n{context}"
 
-    response = await llm.ainvoke([
-        SystemMessage(content=TECHNICAL_SYSTEM_PROMPT),
-        HumanMessage(content=user_msg),
-    ])
-
-    # Track cost
-    usage = getattr(response, "usage_metadata", None) or {}
-    if usage:
-        await track_llm_cost(
-            session_id, "technical", "claude-sonnet-4-20250514",
-            usage.get("input_tokens", 0), usage.get("output_tokens", 0),
-        )
-
-    raw = _extract_json(response.content)
-
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as e:
-        logger.error("Technical agent returned invalid JSON: %s", e)
-        raise ValueError(f"Technical agent returned invalid JSON: {e}") from e
-
-    try:
-        return TechnicalAnalysis(**parsed)
-    except ValidationError as e:
-        logger.error("Technical agent output failed validation: %s", e)
-        raise ValueError(f"Technical agent output failed validation: {e}") from e
+    return await invoke_structured(
+        TechnicalAnalysis,
+        [SystemMessage(content=system_prompt), HumanMessage(content=user_msg)],
+        "Technical agent",
+    )
